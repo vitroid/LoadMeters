@@ -1,4 +1,4 @@
-#/usr/bin/env python
+#/usr/bin/env python2.7
 import cherrypy
 import os.path
 import os
@@ -22,25 +22,31 @@ alias = {"Swindler0":"swindler0",
          "r7"       :"rhea7",
          "th1"      :"thebe1",}
 # processing power relative to bluebird.
-spec = {"swindler"  :["centos",64,1.0/2.4],
-        "yellowbird":["centos",4 ,2.7/2.4],
-        "stella"    :["centos",8 ,4.0/2.4],
-        "chuck"     :["centos",8 ,4.0/2.4],
-        "bluebird"  :["centos",16,2.4/2.4],
-        "redbird"   :["centos",24,2.0/2.4],
-        "erdos"     :["centos",16,2.4/2.4],
-        "io"        :["lion",12],
-        "phobos"    :["snowleopard",8],
-        "eris"      :["snowleopard",8],
-        "elara"     :["snowleopard",12],
-        "lemon"     :["snowleopard",8],
-        "luffa"     :["snowleopard",8],
-        "oberon"    :["leopard",8],
-        "helene"    :["leopard",8],
-        "thebe"     :["leopard",8],
-        "rhea"      :["tiger",8],
-        "ariel"     :["tiger",4],
-        "titan"     :["tiger",4],}
+# simplemd 1000 < Test/w512
+X = 8
+spec = {"swindler"  :["centos",64, X/11.], #11sec
+        "yellowbird":["centos",4 , X/2/2.4], #??
+        "stella"    :["centos",8 , X/4.05  ], #4.05sec
+        "chuck"     :["centos",16, X/3.808],#3.808sec
+        "bluebird"  :["centos",16, X/5.00], #5sec
+        "redbird"   :["centos",24, X/5.154], #5.154sec
+        "blackbird" :["centos",32, X/3.674], #3.674
+        "blackbirdA" :["centos",32, X/3.674], #3.674
+        "blackbirdB" :["centos7",44, X/3.674], #??
+        "erdos"     :["centos",16, X/2/2.4],
+        #"io"        :["lion",12],
+        #"phobos"    :["snowleopard",8],
+        #"eris"      :["snowleopard",8],
+        #"elara"     :["snowleopard",12],
+        #"lemon"     :["snowleopard",8],
+        #"luffa"     :["snowleopard",8],
+        #"oberon"    :["leopard",8],
+        #"helene"    :["leopard",8],
+        #"thebe"     :["leopard",8],
+        #"rhea"      :["tiger",8],
+        #"ariel"     :["tiger",4],
+        #"titan"     :["tiger",4],
+}
 
 def mycmp(x,y):
     r = cmp(x[1],y[1]) #os
@@ -50,7 +56,8 @@ def mycmp(x,y):
         r = cmp(x[0],y[0]) #name
     return r
 
-ascii = re.compile("[a-z]+")
+ascii = re.compile("([a-z]+)([0-9]+)")
+# ascii = re.compile("[a-z]+")
 
 class Ruptime(object):
     def index(self):
@@ -67,12 +74,19 @@ class Ruptime(object):
                 load = columns[-3]
                 load = load[0:len(load)-1]
                 load = float(load)
-                if alias.has_key(server):
+                if server in alias:
                     server = alias[server]
                 m = re.match(ascii, server)
                 if m:
-                    serverclass = m.group(0)
-                    if spec.has_key(serverclass):
+                    # serverclass = m.group(0)
+                    serverclass = m.group(1)
+                    serverorder = m.group(2)
+                    if serverclass == "blackbird":
+                        if serverorder in ("1","2"):
+                            serverclass = "blackbirdA"
+                        else:
+                            serverclass = "blackbirdB"
+                    if serverclass in spec:
                         d = [server,] + spec[serverclass][0:2]
                         d += [load,]
                         if len(spec[serverclass]) == 3:
@@ -96,7 +110,7 @@ class Du(object):
         result = ""
         for subdir,siz in output[path]:
             result +=  ("%s\t%f\n" % (subdir,siz))
-            if output.has_key(subdir):
+            if subdir in output:
                 result += self.Output(output,subdir)
             result += "\n"
         return result
@@ -115,7 +129,7 @@ class Du(object):
             fs = columns[5]
             if fs[0] == '/':
                 fs = fs[1:len(fs)]
-            if fs in ("misc/r0","r1s","r1l","r2","misc/r3"):
+            if fs in ("net/jukebox4/u2","net/jukebox4/r1l","net/jukebox0/r2","net/jukebox1/r3","net/jukebox2/r4","net/jukebox4/r5"):
                 total = float(columns[1])
                 used  = float(columns[2])
                 grandtotal += total
@@ -136,7 +150,7 @@ class Df(object):
     def index(self):
         cherrypy.response.headers['Content-Type'] = 'text/plain'
         pipe = os.popen("df","r")
-	result = "";
+        result = ""
         while True:
             line = pipe.readline()
             if len(line) == 0:
@@ -148,7 +162,7 @@ class Df(object):
             if fs in ("misc/r0","r1s","r1l","r2","misc/r3"):
                 total = float(columns[1])
                 used  = float(columns[2])
-		result += "{0}\t{1}\t{2}\n".format(fs,used,total);
+                result += "{0}\t{1}\t{2}\n".format(fs,used,total)
         #output the content of the queue
         return result
     index.exposed = True
@@ -171,6 +185,14 @@ if __name__ == '__main__':
     cherrypy.server.socket_port = 6502
     cherrypy.server.socket_host = "0.0.0.0"
 
+    cherrypy.config.update({'environment': 'embedded',
+                            'log.access_file' : "/var/log/loadmeters/access.log",
+                            'log.error_file' : "/var/log/loadmeters/error.log",
+                            'log.screen' : False,
+                            'tools.sessions.on': True,
+    })
+    
+    
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
     conf = {
@@ -193,3 +215,4 @@ if __name__ == '__main__':
 
 
     cherrypy.quickstart(Root(), "/", config=conf)
+

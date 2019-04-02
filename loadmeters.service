@@ -1,0 +1,12 @@
+[Unit]
+Description="loadmeters"
+# After=proximity.target
+
+[Service]
+#Type=
+Restart=always
+RestartSec=1
+ExecStart=/usr/bin/python /home/matto/LoadMeters/ruptime2.py
+
+[Install]
+WantedBy=default.target

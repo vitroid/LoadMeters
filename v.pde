@@ -29,8 +29,10 @@ function ruptime()
     }
 }
 
-var winx = screen.width;
-var winy = screen.height;
+//var winx = screen.width;
+//var winy = screen.height;
+var winx = window.innerWidth;
+var winy = window.innerHeight;
 var count = 1000;
 var delay = 0;
 void setup()
@@ -69,13 +71,17 @@ void banner()
 void draw()
 {
     if ( count++ > 5 ){ //update every 3 seconds
-        if ( screen.width < screen.height ){
-            translate(screen.width,0);
+        //if ( screen.width < screen.height ){
+        if ( window.innerWidth < window.innerHeight ){
+            //translate(screen.width,0);
+            translate(window.innerWidth,0);
             rotate(PI/2);
-            winx = screen.height;
-            winy = screen.width;
+            //winx = screen.height;
+            //winy = screen.width;
+            winx = window.innerHeight;
+            winy = window.innerWidth;
         }
-var zoom = winx / 28.0;
+var zoom = winx / 14.5;
 	count = 0;
 	var lines = ruptime();
 	if ( lines.length == 0 ){
@@ -91,7 +97,7 @@ var zoom = winx / 28.0;
 	delay = 0;
 	//println(lines[0]);
 	x = 0;
-	y = 0; //-sqrt(12) * zoom/4; 
+	y = zoom/2; //-sqrt(12) * zoom/4; 
 
 	lastos = "";
         newline = 0;
@@ -103,9 +109,10 @@ var zoom = winx / 28.0;
         var s = winx.toString()+"x"+winy.toString();
         textSize(zoom/2);
         text(s,winx,winy-zoom/2);
+	strokeCap(ROUND);
 	for(int i=0; i<lines.length; i++){
 	    if ( lastos != lines[i][1] ){
-		maxcores = (lastos == "") ? 64 : 24;
+		maxcores = (lastos == "") ? 32 : 44;
 		lastos = lines[i][1];
 		//maxcores = (lastos == "centos") ? 64 : 12;
 		lineheight = maxcores * zoom/20; 
@@ -133,28 +140,25 @@ var zoom = winx / 28.0;
 	    }
 	    noFill(); 
 	    //strokeWeight(zoom*loadw/7);
-	    var sw = zoom/12;
 	    if ( maxcores < cores ){
 		maxcores = cores;
 	    }
 	    //outermost radius
-	    r = cores * rel * zoom/22;
+	    //r = cores * rel * zoom/32;
+	    r = cores * zoom/36;
+	    //var sw = zoom/12;
+	    var sw = rel*zoom/24.0;
 	    x += r + zoom/8; 
 	    r0 = r;
             var outermost = 1;
 	    while ( load0 >= 0.0 ){
+		strokeWeight(sw);
                 //black ring
                 if ( outermost ){
-		    strokeWeight(sw+sw*0.5);
 		    stroke(0,0,0);
-		    ellipse(x,y-lineheight/2,r0*2-sw*0.5,r0*2-sw*0.5);
+		    ellipse(x,y-lineheight/2,r0*2,r0*2); // r = r0 - sw/4
                     outermost = 0;
                 }
-		strokeWeight(sw);
-		//if (load < 0.333){
-		//   stroke(66, 50, load*300);
-		//}
-		//else if (loadw > 1 ){
 		if (loadw > 1 ){
 		    //w approaches slowly to 0 for larger load
 		    var w = exp(-(loadw-1));
@@ -168,10 +172,19 @@ var zoom = winx / 28.0;
 		sw *= (r0-sw)/r0;
 		r0 -= sw*1.6;
 	    }
+	    //ticks
+	    strokeWeight(zoom/24);
+	    stroke(0,0,10); //bg color
+	    for(ii=0;ii<cores;ii+=8){
+		theta = 2*PI*ii/cores;
+		ro = r - sw*0.6;
+		ri = r + sw*0.6;
+		line(x+ri*sin(theta), y-lineheight/2-ri*cos(theta), x+ro*sin(theta), y-lineheight/2-ro*cos(theta));
+	    }
 	    fill(0,0,100);
-	    //noStroke();
+	    noStroke();
 	    textAlign(CENTER); 
-	    textSize(r/1.7); 
+	    textSize(r/1.9); 
 	    pushMatrix();
 	    translate(x,y-lineheight/2);
 	    rotate(-PI/4);
