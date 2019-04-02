@@ -56,6 +56,8 @@ def mycmp(x,y):
         r = cmp(x[0],y[0]) #name
     return r
 
+def mykey(x):
+    return x[1], -x[2], x[0]
 ascii = re.compile("([a-z]+)([0-9]+)")
 # ascii = re.compile("[a-z]+")
 
@@ -97,7 +99,7 @@ class Ruptime(object):
                         output.append(d)
         #output the content of the queue
         result = ""
-        for data in sorted(output,cmp=mycmp):
+        for data in sorted(output,key=mykey):
             for datum in data:
                 result += ("%s\t" % datum)
             result += "\n"

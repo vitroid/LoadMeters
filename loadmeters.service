@@ -6,7 +6,7 @@ Description="loadmeters"
 #Type=
 Restart=always
 RestartSec=1
-ExecStart=/usr/bin/python /home/matto/LoadMeters/ruptime2.py
+ExecStart=/usr/bin/python3 /home/matto/github/LoadMeters/ruptime2.py
 
 [Install]
 WantedBy=default.target
