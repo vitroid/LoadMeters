@@ -1,0 +1,62 @@
+{
+    "blackbird1": {
+        "cores": 32,
+        "mips": 5199.625,
+        "ostype": "CentOS release 6.8 (Final)"
+    },
+    "blackbird2": {
+        "cores": 32,
+        "load": 0.0,
+        "mips": 5199.959999999997,
+        "ostype": "CentOS Stream 8"
+    },
+    "blackbird3": {
+        "cores": 44,
+        "load": 2.63,
+        "mips": 4202.524999999998,
+        "ostype": "CentOS Linux 7 (Core)"
+    },
+    "blackbird4": {
+        "cores": 44,
+        "load": 2.0,
+        "mips": 4202.574999999997,
+        "ostype": "CentOS Linux 7 (Core)"
+    },
+    "blackbird5": {
+        "cores": 44,
+        "load": 0.0,
+        "mips": 4202.539999999997,
+        "ostype": "CentOS Linux 7 (Core)"
+    },
+    "blackbird6": {
+        "cores": 44,
+        "load": 2.76,
+        "mips": 4202.485000000001,
+        "ostype": "CentOS Linux 7 (Core)"
+    },
+    "bluebird1": {
+        "cores": 16,
+        "mips": 6199.7,
+        "ostype": "CentOS release 6.5 (Final)"
+    },
+    "tc1": {
+        "cores": 96,
+        "mips": 4604.929999999993,
+        "ostype": "CentOS Linux 7 (Core)"
+    },
+    "erdos3": {
+        "cores": 16,
+        "mips": 6199,
+        "ostype": "CentOS6?"
+    },
+    "erdos4": {
+        "cores": 16,
+        "mips": 6199,
+        "ostype": "CentOS6?"
+    },
+    "erdos": {
+        "cores": 16,
+        "mips": 6199,
+        "ostype": "CentOS6?"
+    }
+}
