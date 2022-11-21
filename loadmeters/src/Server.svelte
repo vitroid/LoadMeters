@@ -11,8 +11,7 @@
 	$: {
 		squaresize = Math.sqrt(info.mips)/4
 
-		cores_in_row  = Math.sqrt(info.cores)
-		if ( cores_in_row < 8 ){
+		if ( info.cores < 32 ){
 			cores_in_row = 4
 		}
 		else {
