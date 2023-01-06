@@ -8,6 +8,10 @@ import uvicorn
 import json
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_utils.tasks import repeat_every
+
+__api_version__ = 1
+
 
 with open("spec.json") as f:
     spec = json.load(f)
@@ -60,7 +64,7 @@ def get_spec(hostname):
     except:
         return
 
-def ruptime():
+def ruptime_():
     output = {}
     with os.popen("ruptime -a","r") as pipe:
         for line in pipe:
@@ -83,10 +87,57 @@ def ruptime():
     return json.dumps(output)
 
 
+def ruptime():
+    output = {}
+    with open("history.json") as f:
+        history = json.load(f)
+        for server in history:
+            if server not in spec:
+                s = get_spec(server)
+                if s is not None:
+                    spec[server] = s
+                    with open("spec.json", "w") as f:
+                        json.dump(spec, f, indent=4, sort_keys=True)
+            else:
+                output[server] = spec[server]
+            if server in output:
+                load = history[server]
+                output[server]["load"] = load
+    return json.dumps(output)
+
+
+
 app = FastAPI()
-api = FastAPI(openapi_prefix="/v1")
-app.mount("/v1", api)
+api = FastAPI(root_path=f"/v{__api_version__}")
+app.mount(f"/v{__api_version__}", api)
 app.mount("/", StaticFiles(directory="../loadmeters/public", html=True), name="static")
+
+
+
+@app.on_event("startup")
+@repeat_every(seconds=6)  # 1 minute
+def update_history() -> None:
+    fn = "history.json"
+    try:
+        with open(fn) as f:
+            history = json.load(f)
+    except:
+        history = {}
+    with os.popen("ruptime -a","r") as pipe:
+        for line in pipe:
+            columns = line.split()
+            server = columns[0]
+            if len(columns) == 9:
+                load = float(columns[-3].strip(","))
+            else:
+                load = -1
+            if server not in history:
+                history[server] = []
+            history[server].append(load)
+            if len(history[server]) > 60:
+                del history[server][0]
+    with open(fn, "w") as f:
+        json.dump(history, f, indent=4)
 
 
 origins = [
@@ -114,4 +165,4 @@ async def disk_usage() -> str:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8088)) )
+    uvicorn.run("api:app", host="0.0.0.0", reload=True, port=int(os.environ.get("PORT", 8088)) )

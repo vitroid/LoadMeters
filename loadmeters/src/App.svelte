@@ -16,3 +16,14 @@
 	<Servers />
 	<ColorLegend />
 </main>
+
+<style>
+	main {
+		display: flex;
+		flex-direction: column;
+		flex-wrap: wrap;
+		height: 100vh;
+
+		background-color: #333;
+	}
+</style>

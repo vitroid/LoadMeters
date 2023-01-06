@@ -1,8 +1,10 @@
 import { writable } from 'svelte/store';
 export let uptimes=writable({})
 export let oscolors=writable({})
+export let cwidth=writable({})
+export let cheight=writable({})
 
-const BASEURL = "http://172.23.78.18:8088"
+const BASEURL = "http://172.23.78.16:8088"
 
 
 let palettes = Array(100)
@@ -30,7 +32,7 @@ export async function uptime(){
 }
 
 
-function hslToHex(h, s, l) {
+export function hslToHex(h, s, l) {
     l /= 100;
     const a = s * Math.min(l, 1 - l) / 100;
     const f = n => {

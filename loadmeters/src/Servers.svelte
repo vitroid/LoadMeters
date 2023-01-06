@@ -1,12 +1,11 @@
 <script>
 	import Server from "./Server.svelte";
-	import { uptimes } from "./stores.ts";
-
+	import { cheight, cwidth, uptimes } from "./stores.ts";
 	let u
 	uptimes.subscribe(_=>{u=_})
 </script>
 
-<div>
+<div bind:clientWidth={$cwidth} bind:clientHeight={$cheight}>
     {#each Object.keys(u) as hostname}
 	<Server {hostname} info={u[hostname]} />
     {/each}
@@ -15,7 +14,10 @@
 <style>
 	div {
 		display: flex;
-		flex-direction: row;
+		flex-direction: column;
 		flex-wrap: wrap;
+		background-color: #444;
+		height: 95vh;
+		width: auto;
 	}
 </style>

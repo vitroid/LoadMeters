@@ -1,72 +1,88 @@
 <script>
-	import { oscolors } from './stores.ts';
+	// import { cwidth } from 'Servers.svelte';
+	import { cheight, cwidth, hslToHex, oscolors } from './stores.ts';
 	export let info
 	export let hostname
+	// import Viewport from 'svelte-viewport-info'
 
-	let squaresize
-	let panelw
-	let cores_in_row
-	let colors
-
+	let width = $cwidth / 6.5 / 60
+	let heights = []
+	let colors = []
+	let fullheight
+	let titleh
+	let scale = ($cheight-titleh) / (4700*96)
 	$: {
-		squaresize = Math.sqrt(info.mips)/4
+		// cwidth;
+		width = $cwidth / 6.5 / 60
+		scale = ($cheight-titleh) / (4700*96)
 
-		if ( info.cores < 32 ){
-			cores_in_row = 4
-		}
-		else {
-			cores_in_row = 8
-		}
-		panelw = cores_in_row*squaresize //padding
-
-		colors = Array(info.cores)
-		for(let i=0;i<info.cores; i++){
-			if ( i < info.load ){
-				colors[i] = "blue"
+		fullheight = info.cores * info.mips * scale
+		for(let i=0;i<info.load.length; i++){
+			if ( info.load[i] >= 0 ){
+				heights[i] = info.load[i] * info.mips * scale
+				let load = info.load[i] / info.cores
+				if ( load > 1 ){
+					let h = 0
+					let s = 100 // Math.exp(-load)*100
+					let v = 100 - 50*Math.exp(-(load-1))
+					colors[i] = hslToHex(h, s, v)
+				}
+				else{
+					let h = 300 - 300*load
+					let s = load*100
+					let v = 50
+					colors[i] = hslToHex(h, s, v)
+				}
 			}
 			else{
-				colors[i] = "black"
+				heights[i] = fullheight;
+				colors[i] = hslToHex(0, 100, 50)
 			}
-		}
 
+		}
 	}
 </script>
 
-<div class="panel" style="background-color: {$oscolors[info.ostype]}">
-	<div class="name">
+<div class="panel" style="background-color: {$oscolors[info.ostype]}; width: {width*60}px">
+	<div class="name" bind:clientHeight={titleh}>
 		{hostname}
 	</div>
-	<div class="load" style="width:{panelw}px">
-		{#each Array(info.cores) as _,i}
-		<div class="core" style="width:{squaresize}px; height:{squaresize}px; background-color: {colors[i]}">
+	<div class="load" style="height: {fullheight}px;">
+		{#each info.load as _,i}
+		<div class="core" style="width:{width}px; height:{heights[i]}px; background-color: {colors[i]}">
 		</div>
 		{/each}
 	</div>
 </div>
+<!-- {Viewport.Width} -->
 
 <style>
 	.panel {
 		display: flex;
 		flex-direction: column;
-		padding: 10px;
+		padding: 0px;
 		background-color: #ddd;
 		height: auto;
-		border-radius: 15px;
-		margin: 2px;
+		width: 120px;
+		/* border-radius: 15px; */
+		margin: 5px;
 	}
 	.name {
-		padding: 0 0 5px 0;
+		padding: 5px;
 		color: white;
 	}
 	.load {
 		display: flex;
+		background-color: #000;
 		flex-wrap: wrap;
 		flex-direction: row;
 		/* padding: 10px; */
+		/* margin-top: auto; */
 	}
 	.core {
 		border-radius: 5px;
 		padding: 0;
 		margin: 0;
+		margin-top: auto;
 	}
 </style>
