@@ -17,6 +17,18 @@
 
 <style>
 	.container {
+		/* settings for itself */
+        position: absolute;
+        bottom: 0%;
+        /* left: 00%; */
+        z-index: 10;
+        /* width:400px;
+        height:400px;
+        margin-left:-200px;
+        margin-top:-200px;
+        z-index: 10; */
+
+		/* settings for the contained */
 		display: flex;
 		flex-direction: row;
 		flex-wrap: wrap;
@@ -25,5 +37,6 @@
 		border-radius: 10px;
 		color: white;
 		padding: 5px;
+        z-index: 20;
 	}
 </style>
