@@ -115,7 +115,7 @@ app.mount("/", StaticFiles(directory="../loadmeters/public", html=True), name="s
 
 
 @app.on_event("startup")
-@repeat_every(seconds=6)  # 1 minute
+@repeat_every(seconds=15)  # 15 seconds
 def update_history() -> None:
     fn = "history.json"
     try:

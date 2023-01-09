@@ -13,11 +13,12 @@
 
 <style>
 	div {
+		color: #888;
 		display: flex;
 		flex-direction: column;
 		flex-wrap: wrap;
 		background-color: #444;
-		height: 95vh;
+		height: 100vh;
 		width: auto;
 	}
 </style>

@@ -4,7 +4,8 @@ export let oscolors=writable({})
 export let cwidth=writable({})
 export let cheight=writable({})
 
-const BASEURL = "http://172.23.78.16:8088"
+const BASEURL = "http://" + location.hostname + ":8088"
+
 
 
 let palettes = Array(100)
@@ -12,23 +13,56 @@ for(let i=0;i<100;i++){
     palettes[i] = palette(i)
 }
 
-export async function uptime(){
-    const res = await fetch(BASEURL+'/v1/ruptime', {
-        method: "GET",
-    })
 
-    res.json().then(result=>{
-        let u = JSON.parse(result)
-        uptimes.set(u)
-        let c={}
-        for(let hostname in u){
-            let os=u[hostname].ostype
-            if ( ! (os in c) ){
-                c[os] = palettes[Object.keys(c).length]
+
+async function fetchWithTimeout(resource, options = {}) {
+    const { timeout = 8000 } = options;
+
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(resource, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  }
+
+export async function uptime(){
+    try {
+        const res = await fetchWithTimeout(BASEURL+'/v1/ruptime', {
+            method: "GET",
+        })
+        res.json().then(result=>{
+            let u = JSON.parse(result)
+            // 計算力を計算する。
+            let maxc = 0;
+            for(let hostname in u){
+                const c=u[hostname].cores*u[hostname].mips
+                if ( maxc < c ){
+                    maxc = c;
+                }
             }
-        }
-        oscolors.set(c)
-    })
+            // 相対計算力を格納する。
+            for(let hostname in u){
+                const c=u[hostname].cores*u[hostname].mips
+                u[hostname].relc = c/maxc
+            }
+            uptimes.set(u)
+            let c={}
+            for(let hostname in u){
+                let os=u[hostname].ostype
+                if ( ! (os in c) ){
+                    c[os] = palettes[Object.keys(c).length]
+                }
+            }
+            oscolors.set(c)
+        })
+        return true;
+    }
+    catch(err){
+        return false;
+    }
 }
 
 
