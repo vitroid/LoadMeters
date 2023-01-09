@@ -31,10 +31,9 @@
 			}
 		}
 	}
-	const tips=info.ostype
 </script>
 
-<div class="panel" style="height: {info.relc*100}%" tip-text={tips} tip-bg={$oscolors[info.ostype]}>
+<div class="panel" style="height: {info.relc*100}%">
 	<div class="name">
 		{hostname}
 	</div>
@@ -48,10 +47,30 @@
 			</div>
 		{/each}
 	</div>
+	<!-- Hoverを受けとめるための透明な空箱 -->
+	<div class="tooltip-container">
+	</div>
+	<!-- Hoverした時に表示されるもの。-->
+	<div class="tooltip-item" style="background-color: {$oscolors[info.ostype]};">
+		OS: {info.ostype}<br />
+		bogoMIPS: {info.mips.toFixed(0)}<br />
+		Cores: {info.cores}
+	</div>
 </div>
-<!-- {Viewport.Width} -->
 
 <style>
+	.tooltip-item {
+		color: #fff;
+		display: block;
+		opacity: 0;
+		padding: 5px;
+		/* padding: .25rem .75rem; */
+		position: absolute;
+		/* transform: translateX(-50%); */
+		transition: opacity .3s;
+		/* width: 7rem; */
+		z-index: 219;
+	}
 	.panel {
 		display: flex;
 		flex-direction: column;
@@ -65,40 +84,16 @@
   		filter:drop-shadow(5px 5px 5px rgba(0, 0, 0, 0.2));
 		position: relative;
 	}
-	/* .panel {
+	/* これを一番上にしておかないと、ホバーが検出できない。 */
+	.tooltip-container {
 		position: absolute;
-		bottom: 0%;
-		right: 0%;
-		border-bottom: 1px dashed #000;
-		z-index:11;
-		font-size: 200%;
-		margin-right: 5px;
-	} */
-
-	.panel:before {
-		content: attr(tip-text);
-		position: absolute;
-		font-size: 100%;
-
-		top: 20px;
-		left: 0%;
-
-		background-color: attr(tip-bg);
-		color: #fff;
-		text-align: left;
-		padding: 5px;
-
-		display: none;
-		z-index:12;
-
-		opacity:0;
-		transition:1s opacity;
+		width: 100%;
+		height: 100%;
+		z-index: 220;
 	}
-	.panel:hover:before {
- 		display:block;
-		opacity:1;
+	.tooltip-container:hover + .tooltip-item {
+		opacity: 1;
 	}
-
 	.name {
 		position: absolute;
 		top: 0px;

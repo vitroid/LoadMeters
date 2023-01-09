@@ -13,11 +13,7 @@
         position: absolute;
         top: 50%;
         left: 50%;
-        width:400px;
-        height:400px;
-        margin-left:-200px;
-        margin-top:-200px;
-        z-index: 10;
+        z-index: 100;
         font-size: 500%;
         color: #fff;
     }
