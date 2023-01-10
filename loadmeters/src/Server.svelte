@@ -54,7 +54,8 @@
 	<div class="tooltip-item" style="background-color: {$oscolors[info.ostype]};">
 		OS: {info.ostype}<br />
 		bogoMIPS: {info.mips.toFixed(0)}<br />
-		Cores: {info.cores}
+		Cores: {info.cores}<br />
+		GPU: {info.gpu}
 	</div>
 </div>
 
