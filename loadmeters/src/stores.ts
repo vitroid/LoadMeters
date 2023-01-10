@@ -30,11 +30,12 @@ async function fetchWithTimeout(resource, options = {}) {
 
 export async function uptime(){
     try {
-        const res = await fetchWithTimeout(BASEURL+'/v1/ruptime', {
+        const res = await fetchWithTimeout(BASEURL+'/v1/stat', {
             method: "GET",
         })
         res.json().then(result=>{
-            let u = JSON.parse(result)
+            // let u = JSON.parse(result)
+            let u = result
             // 計算力を計算する。
             let maxc = 0;
             for(let hostname in u){

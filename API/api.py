@@ -1,110 +1,44 @@
 #/usr/bin/env python3
-import os.path
+import json
 import os
+import os.path
 import re
 import time
-from fastapi import Depends, FastAPI
+from collections import defaultdict
+
+import requests
 import uvicorn
-import json
-from fastapi.staticfiles import StaticFiles
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi_utils.tasks import repeat_every
 
 __api_version__ = 1
 
-
-with open("spec.json") as f:
-    spec = json.load(f)
-
-ascii = re.compile("([a-z]+)([0-9]+)")
+from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
 
-def df():
-    result = {}
-    with os.popen("df","r") as pipe:
-        for line in pipe:
-            columns = line.split()
-            fs = columns[0]
-            if "/r" in fs or "/u" in fs:
-                host, path = fs.split(":")
-                total = int(columns[1])
-                used  = int(columns[2])
-                result[path] = {
-                    "capacity": total,
-                    "filled"  : used
-                }
-    return result
+class MyListener(ServiceListener):
 
+    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        print(name)
+        print(f"Service {name} updated")
 
-def ostype(hostname):
-    with os.popen(f"ssh {hostname}.local 'fgrep PRETTY_NAME /etc/os-release'") as pipe:
-        result = pipe.readline().split("=")
-        if len(result) > 1:
-            return result[1].strip().strip('"')
-    with os.popen(f"ssh {hostname}.local 'cat /etc/system-release'") as pipe:
-        s = pipe.readline().strip()
-        if len(s):
-            return s
-    assert False
+    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        print(f"Service {name} removed")
 
-
-def get_spec(hostname):
-    try:
-        with os.popen(f"ssh {hostname}.local fgrep -i bogomips /proc/cpuinfo") as pipe:
-            lines = pipe.readlines()
-            print(lines)
-            bogomips = [float(x.split(":")[1].strip()) for x in lines]
-            cores = len(bogomips)
-            mips = sum(bogomips) / cores
-            return {
-                "cores": cores,
-                "mips":  mips,
-                "ostype": ostype(hostname),
-            }
-    except:
-        return
-
-def ruptime_():
-    output = {}
-    with os.popen("ruptime -a","r") as pipe:
-        for line in pipe:
-            columns = line.split()
-            if len(columns) == 9:
-                server = columns[0]
-                if server not in spec:
-                    s = get_spec(server)
-                    if s is not None:
-                        spec[server] = s
-                        with open("spec.json", "w") as f:
-                            json.dump(spec, f, indent=4, sort_keys=True)
-                else:
-                    output[server] = spec[server]
-                if server in output:
-                    load = columns[-3]
-                    load = load[0:len(load)-1]
-                    load = float(load)
-                    output[server]["load"] = load
-    return json.dumps(output)
-
-
-def ruptime():
-    output = {}
-    with open("history.json") as f:
-        history = json.load(f)
-        for server in history:
-            if server not in spec:
-                s = get_spec(server)
-                if s is not None:
-                    spec[server] = s
-                    with open("spec.json", "w") as f:
-                        json.dump(spec, f, indent=4, sort_keys=True)
-            else:
-                output[server] = spec[server]
-            if server in output:
-                load = history[server]
-                output[server]["load"] = load
-    return json.dumps(output)
-
+    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        info = zc.get_service_info(type_, name)
+        # 賢明な方法ではないが、ほかにthread間でデータを渡すうまい方法を知らない。
+        try:
+            with open("servers.json") as f:
+                data = json.load(f)
+        except:
+            data = {}
+        data[info.server] = info.port
+        with open("servers.json", "w") as f:
+            json.dump(data, f, indent=4)
+        print(f"Service {name} added, service info: {info}")
 
 
 app = FastAPI()
@@ -117,28 +51,38 @@ app.mount("/", StaticFiles(directory="../loadmeters/public", html=True), name="s
 @app.on_event("startup")
 @repeat_every(seconds=15)  # 15 seconds
 def update_history() -> None:
-    fn = "history.json"
+    fn = "servers.json"
     try:
         with open(fn) as f:
-            history = json.load(f)
+            servers = json.load(f)
     except:
-        history = {}
-    with os.popen("ruptime -a","r") as pipe:
-        for line in pipe:
-            columns = line.split()
-            server = columns[0]
-            if len(columns) == 9:
-                load = float(columns[-3].strip(","))
-            else:
-                load = -1
-            if server not in history:
-                history[server] = []
-            history[server].append(load)
-            if len(history[server]) > 60:
-                del history[server][0]
+        servers = {}
+    fn = "stat.json"
+    try:
+        with open(fn) as f:
+            stat = json.load(f)
+    except:
+        stat = dict()
+    for server, port in servers.items():
+        headers = {"Accept": "application/json"}
+        try:
+            r = requests.get(f'http://{server}:{port}/v1/info', headers=headers)
+            data = r.json()
+            server = server.replace(".local.", "")
+            if server not in stat:
+                stat[server] = dict()
+            stat[server] = stat[server] | data
+            stat[server]["history"] = stat[server].get("history", [])
+            stat[server]["history"].append(data["load"])
+            if len(stat[server]["history"]) > 60:
+                del stat[server]["history"][0]
+        except:
+            pass
     with open(fn, "w") as f:
-        json.dump(history, f, indent=4)
+        json.dump(stat, f, indent=4)
 
+
+# update_history()
 
 origins = [
     "*",
@@ -154,15 +98,17 @@ app.add_middleware(
 )
 
 
-@api.get("/ruptime")
-async def load_average() -> str:
-    return ruptime()
-
-
-@api.get("/df")
-async def disk_usage() -> str:
-    return df()
+@api.get("/stat")
+async def load_average():
+    try:
+        with open("stat.json") as f:
+            return json.load(f)
+    except:
+        return {}
 
 
 if __name__ == "__main__":
+    zeroconf = Zeroconf()
+    listener = MyListener()
+    browser = ServiceBrowser(zeroconf, "_loadreporter._tcp.local.", listener)
     uvicorn.run("api:app", host="0.0.0.0", reload=True, port=int(os.environ.get("PORT", 8088)) )

@@ -6,7 +6,7 @@
 </script>
 
 <div bind:clientWidth={$cwidth} bind:clientHeight={$cheight}>
-    {#each Object.keys(u) as hostname}
+    {#each Object.keys(u).sort() as hostname}
 	<Server {hostname} info={u[hostname]} />
     {/each}
 </div>

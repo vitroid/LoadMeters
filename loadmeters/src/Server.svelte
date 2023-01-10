@@ -7,9 +7,9 @@
 	let heights = []
 	let colors = []
 	$: {
-		for(let i=0;i<info.load.length; i++){
-			if ( info.load[i] >= 0 ){
-				let load = info.load[i] / info.cores
+		for(let i=0;i<info.history.length; i++){
+			if ( info.history[i] >= 0 ){
+				let load = info.history[i] / info.cores
 				heights[i] = load
 				if ( load > 1 ){
 					heights[i] = 1.0
@@ -41,7 +41,7 @@
 		<!-- triangle -->
 	</div>
 	<div class="load">
-		{#each info.load as _,i}
+		{#each info.history as _,i}
 		<!-- <div class="core" style="width:{width}px; height:{heights[i]*100}%; background-color: {colors[i]}"> -->
 			<div class="core" style="height:{heights[i]*100}%; background-color: {colors[i]}">
 			</div>
