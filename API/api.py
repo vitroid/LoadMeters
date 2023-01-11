@@ -2,9 +2,7 @@
 import json
 import os
 import os.path
-import re
-import time
-from collections import defaultdict
+import socket
 
 import requests
 import uvicorn
@@ -16,6 +14,11 @@ from fastapi_utils.tasks import repeat_every
 __api_version__ = 1
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
+
+
+def uint32_to_ip(t):
+    # t = struct.pack("!I", ipn)
+    return socket.inet_ntoa(t)
 
 
 class MyListener(ServiceListener):
@@ -35,7 +38,12 @@ class MyListener(ServiceListener):
                 data = json.load(f)
         except:
             data = {}
-        data[info.server] = info.port
+        # with open("debug.txt", "w") as f:
+        #     print([uint32_to_ip(a) for a in info.addresses], file=f)
+        data[info.server] = {
+            "port": info.port,
+            "addresses": [uint32_to_ip(a) for a in info.addresses]
+        }
         with open("servers.json", "w") as f:
             json.dump(data, f, indent=4)
         print(f"Service {name} added, service info: {info}")
@@ -63,15 +71,17 @@ def update_history() -> None:
             stat = json.load(f)
     except:
         stat = dict()
-    for server, port in servers.items():
+    for server, info in servers.items():
         headers = {"Accept": "application/json"}
         try:
+            port = info["port"]
             r = requests.get(f'http://{server}:{port}/v1/info', headers=headers)
             data = r.json()
             server = server.replace(".local.", "")
             if server not in stat:
                 stat[server] = dict()
             stat[server] = stat[server] | data
+            stat[server]["address"] = info["addresses"]
             stat[server]["history"] = stat[server].get("history", [])
             stat[server]["history"].append(data["load"])
             if len(stat[server]["history"]) > 60:

@@ -52,6 +52,7 @@
 	</div>
 	<!-- Hoverした時に表示されるもの。-->
 	<div class="tooltip-item" style="background-color: {$oscolors[info.ostype]};">
+		IP: {info.address}<br />
 		OS: {info.ostype}<br />
 		bogoMIPS: {info.mips.toFixed(0)}<br />
 		Cores: {info.cores}<br />
