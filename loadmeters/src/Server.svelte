@@ -3,7 +3,7 @@
 	export let info
 	export let hostname
 
-
+	let usage
 	let heights = []
 	let colors = []
 	$: {
@@ -30,6 +30,11 @@
 				colors[i] = hslToHex(0, 100, 20)
 			}
 		}
+		usage = "<ul>"
+		for(let user in info.usage){
+			usage += "<li>" + user + ":" + (info.usage[user]/100).toFixed(0) + "</li>"
+		}
+		usage += "</ul>"
 	}
 </script>
 
@@ -56,7 +61,8 @@
 		OS: {info.ostype}<br />
 		bogoMIPS: {info.mips.toFixed(0)}<br />
 		Cores: {info.cores}<br />
-		GPU: {info.gpu}
+		{@html usage}
+		GPU: {info.gpu}<br />
 	</div>
 </div>
 
