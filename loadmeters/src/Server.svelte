@@ -1,9 +1,9 @@
 <script>
 	import { hslToHex, oscolors } from './stores.ts';
+	import Tooltip from "./Tooltip.svelte";
 	export let info
 	export let hostname
 
-	let usage
 	let heights = []
 	let colors = []
 	$: {
@@ -30,17 +30,19 @@
 				colors[i] = hslToHex(0, 100, 20)
 			}
 		}
-		usage = "<ul>"
-		for(let user in info.usage){
-			usage += "<li>" + user + ":" + (info.usage[user]/100).toFixed(0) + "</li>"
-		}
-		usage += "</ul>"
 	}
 </script>
 
 <div class="panel" style="height: {info.relc*100}%">
 	<div class="name">
 		{hostname}
+	</div>
+	<div class="links">
+		<ul>
+			{#each info.address as a}
+			<li><a class="link" href="ssh://{a}">{a}</a></li>
+			{/each}
+		</ul>
 	</div>
 	<div class="os" style="background-color: {$oscolors[info.ostype]};">
 		<!-- triangle -->
@@ -52,33 +54,10 @@
 			</div>
 		{/each}
 	</div>
-	<!-- Hoverを受けとめるための透明な空箱 -->
-	<div class="tooltip-container">
-	</div>
-	<!-- Hoverした時に表示されるもの。-->
-	<div class="tooltip-item" style="background-color: {$oscolors[info.ostype]};">
-		IP: {info.address}<br />
-		OS: {info.ostype}<br />
-		bogoMIPS: {info.mips.toFixed(0)}<br />
-		Cores: {info.cores}<br />
-		{@html usage}
-		GPU: {info.gpu}<br />
-	</div>
+	<Tooltip {info} />
 </div>
 
 <style>
-	.tooltip-item {
-		color: #fff;
-		display: block;
-		opacity: 0;
-		padding: 5px;
-		/* padding: .25rem .75rem; */
-		position: absolute;
-		/* transform: translateX(-50%); */
-		transition: opacity .3s;
-		/* width: 7rem; */
-		z-index: 219;
-	}
 	.panel {
 		display: flex;
 		flex-direction: column;
@@ -92,16 +71,6 @@
   		filter:drop-shadow(5px 5px 5px rgba(0, 0, 0, 0.2));
 		position: relative;
 	}
-	/* これを一番上にしておかないと、ホバーが検出できない。 */
-	.tooltip-container {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-		z-index: 220;
-	}
-	.tooltip-container:hover + .tooltip-item {
-		opacity: 1;
-	}
 	.name {
 		position: absolute;
 		top: 0px;
@@ -112,11 +81,12 @@
 	}
 	.load {
 		display: flex;
+		flex-wrap: nowrap;
 		background-color: #000;
-		flex-wrap: wrap;
 		flex-direction: row;
 		height: 100%;
 		width: 100%;
+
 		/* border-radius: 13px; */
 		/* padding: 10px; */
 		/* margin-top: auto; */
@@ -134,5 +104,17 @@
 		height: 30px;
 		clip-path: polygon(0% 100%, 0% 0%, 100% 0%);
 		z-index: 2;
+	}
+	.links {
+		position: absolute;
+		opacity: 0.5;
+		width: 100%;
+		/* height: 100%; */
+		bottom: 0%;
+		/* clip-path: polygon(0% 100%, 0% 0%, 100% 0%); */
+		z-index: 322;
+	}
+	a.link {
+		color: white;
 	}
 </style>

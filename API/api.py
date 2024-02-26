@@ -73,21 +73,21 @@ def update_history() -> None:
         stat = dict()
     for server, info in servers.items():
         headers = {"Accept": "application/json"}
+        shortname = server.replace(".local.", "")
         try:
             port = info["port"]
             r = requests.get(f'http://{server}:{port}/v1/info', headers=headers)
             data = r.json()
-            server = server.replace(".local.", "")
-            if server not in stat:
-                stat[server] = dict()
-            stat[server] = stat[server] | data
-            stat[server]["address"] = info["addresses"]
-            stat[server]["history"] = stat[server].get("history", [])
-            stat[server]["history"].append(data["load"])
-            if len(stat[server]["history"]) > 60:
-                del stat[server]["history"][0]
+            if shortname not in stat:
+                stat[shortname] = dict()
+            stat[shortname] = stat[shortname] | data
+            stat[shortname]["address"] = info["addresses"]
+            stat[shortname]["history"] = stat[shortname].get("history", [])
+            stat[shortname]["history"].append(data["load"])
         except:
-            pass
+            stat[shortname]["history"].append(-1)
+        if len(stat[shortname]["history"]) > 60:
+            stat[shortname]["history"] = stat[shortname]["history"][-60:]
     with open(fn, "w") as f:
         json.dump(stat, f, indent=4)
 
