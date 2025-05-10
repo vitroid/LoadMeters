@@ -1,12 +1,17 @@
 [Unit]
-Description="loadmeters"
-# After=proximity.target
+Description=Load Meters Monitoring Service
+After=network.target
 
 [Service]
-#Type=
+Type=simple
+User=root
 Restart=always
 RestartSec=1
-ExecStart=/usr/bin/python3 /home/matto/github/LoadMeters/ruptime2.py
+Environment=POETRY_HOME=/opt/poetry
+Environment=PATH=/opt/poetry/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/poetry/bin/poetry run loadmeters
+WorkingDirectory=/var/lib/loadmeters
+Environment=PORT=8081
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
