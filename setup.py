@@ -19,7 +19,7 @@ Type=simple
 User=root
 Restart=always
 RestartSec=1
-ExecStart=/usr/local/bin/loadmeters
+ExecStart=/usr/local/bin/python3 -m loadmeters_api.api
 WorkingDirectory=/var/lib/loadmeters
 Environment=PORT=8081
 
