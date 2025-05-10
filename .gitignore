@@ -3,3 +3,4 @@ API/servers.json.old
 __pycache__
 *.egg-info
 stat.json
+build/
