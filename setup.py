@@ -106,4 +106,8 @@ print("Setup completed.")
 
 # アンインストール時の処理
 import atexit
-atexit.register(uninstall_service) 
+atexit.register(uninstall_service)
+
+# 直接実行された場合の処理
+if __name__ == "__main__":
+    setup_service() 
