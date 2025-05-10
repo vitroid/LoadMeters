@@ -110,4 +110,8 @@ atexit.register(uninstall_service)
 
 # 直接実行された場合の処理
 if __name__ == "__main__":
-    setup_service() 
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        setup_service()
+    else:
+        print("Usage: python3 setup.py setup")
+        sys.exit(1) 
