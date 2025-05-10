@@ -107,7 +107,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'loadmeters=API.api:main',
+            'loadmeters=loadmeters_api.api:main',
         ],
     },
     cmdclass={
