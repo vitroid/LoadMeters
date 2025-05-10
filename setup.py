@@ -3,6 +3,8 @@ import subprocess
 import sys
 from setuptools import setup, find_packages
 from setuptools.command.install import install
+from setuptools.command.develop import develop
+from distutils.cmd import Command
 
 def setup_service():
     print("Setting up service...")
@@ -63,16 +65,19 @@ class PostInstallCommand(install):
         print("Starting installation...")
         install.run(self)
         print("Package installation completed")
-        setup_service()
 
-def uninstall_service():
-    try:
-        subprocess.run(["systemctl", "stop", "loadmeters"])
-        subprocess.run(["systemctl", "disable", "loadmeters"])
-        os.remove("/etc/systemd/system/loadmeters.service")
-        subprocess.run(["systemctl", "daemon-reload"])
-    except:
+class SetupCommand(Command):
+    description = "Set up the systemd service"
+    user_options = []
+
+    def initialize_options(self):
         pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        setup_service()
 
 print("Loading setup.py...")
 
@@ -95,6 +100,7 @@ setup(
     },
     cmdclass={
         'install': PostInstallCommand,
+        'setup': SetupCommand,
     },
     author="Your Name",
     author_email="your.email@example.com",
@@ -102,16 +108,4 @@ setup(
     python_requires=">=3.7",
 )
 
-print("Setup completed.")
-
-# アンインストール時の処理
-import atexit
-atexit.register(uninstall_service)
-
-# 直接実行された場合の処理
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "setup":
-        setup_service()
-    else:
-        print("Usage: python3 setup.py setup")
-        sys.exit(1) 
+print("Setup completed.") 

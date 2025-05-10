@@ -3,6 +3,8 @@ import json
 import os
 import os.path
 import socket
+import subprocess
+import sys
 
 import requests
 import uvicorn
@@ -53,7 +55,7 @@ app = FastAPI()
 api = FastAPI(root_path=f"/v{__api_version__}")
 app.mount(f"/v{__api_version__}", api)
 # Svelte? UIもこいつがserveする。
-app.mount("/", StaticFiles(directory="../loadmeters/public", html=True), name="static")
+app.mount("/", StaticFiles(directory="/var/lib/loadmeters/public", html=True), name="static")
 
 
 import http3
@@ -150,8 +152,65 @@ async def load_average():
         return {}
 
 
+def setup_service():
+    print("Setting up service...")
+    try:
+        # systemdサービスファイルの作成
+        service_content = """[Unit]
+Description=Load Meters Monitoring Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Restart=always
+RestartSec=1
+ExecStart=/usr/bin/python3 -m loadmeters_api.api
+WorkingDirectory=/var/lib/loadmeters
+Environment=PORT=8081
+
+[Install]
+WantedBy=multi-user.target
+"""
+        
+        # サービスファイルを書き込み
+        service_path = "/etc/systemd/system/loadmeters.service"
+        print(f"Writing service file to {service_path}")
+        with open(service_path, "w") as f:
+            f.write(service_content)
+        print(f"Created service file at {service_path}")
+        
+        # データディレクトリの作成
+        data_dir = "/var/lib/loadmeters"
+        print(f"Creating data directory at {data_dir}")
+        os.makedirs(data_dir, exist_ok=True)
+        print("Created data directory")
+        
+        # systemdの再読み込みとサービスの有効化
+        print("Reloading systemd...")
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        print("Systemd reloaded")
+        
+        print("Enabling loadmeters service...")
+        subprocess.run(["systemctl", "enable", "loadmeters"], check=True)
+        print("Service enabled")
+        
+        print("Starting loadmeters service...")
+        subprocess.run(["systemctl", "start", "loadmeters"], check=True)
+        print("Service started")
+        
+        print("Service setup completed successfully")
+    except Exception as e:
+        print(f"Error during service setup: {e}", file=sys.stderr)
+        print(f"Error type: {type(e)}", file=sys.stderr)
+        print(f"Error details: {str(e)}", file=sys.stderr)
+        raise
+
 def main():
     basicConfig(level=INFO)
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        setup_service()
+        return
     zeroconf = Zeroconf()
     listener = MyListener()
     browser = ServiceBrowser(zeroconf, "_loadreporter._tcp.local.", listener)
