@@ -7,11 +7,12 @@ from setuptools.command.install import install
 class PostInstallCommand(install):
     def run(self):
         print("Starting installation...")
-        install.run(self)
-        print("Package installation completed, starting service setup...")
-        
-        # systemdサービスファイルの作成
-        service_content = """[Unit]
+        try:
+            install.run(self)
+            print("Package installation completed, starting service setup...")
+            
+            # systemdサービスファイルの作成
+            service_content = """[Unit]
 Description=Load Meters Monitoring Service
 After=network.target
 
@@ -27,8 +28,7 @@ Environment=PORT=8081
 [Install]
 WantedBy=multi-user.target
 """
-        
-        try:
+            
             # サービスファイルを書き込み
             service_path = "/etc/systemd/system/loadmeters.service"
             print(f"Writing service file to {service_path}")
@@ -57,7 +57,7 @@ WantedBy=multi-user.target
             
             print("Service setup completed successfully")
         except Exception as e:
-            print(f"Error during service setup: {e}", file=sys.stderr)
+            print(f"Error during installation: {e}", file=sys.stderr)
             print(f"Error type: {type(e)}", file=sys.stderr)
             print(f"Error details: {str(e)}", file=sys.stderr)
             raise
