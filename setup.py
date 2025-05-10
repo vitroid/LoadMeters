@@ -4,17 +4,11 @@ import sys
 from setuptools import setup, find_packages
 from setuptools.command.install import install
 
-print("Loading setup.py...")
-
-class PostInstallCommand(install):
-    def run(self):
-        print("Starting installation...")
-        try:
-            install.run(self)
-            print("Package installation completed, starting service setup...")
-            
-            # systemdサービスファイルの作成
-            service_content = """[Unit]
+def setup_service():
+    print("Setting up service...")
+    try:
+        # systemdサービスファイルの作成
+        service_content = """[Unit]
 Description=Load Meters Monitoring Service
 After=network.target
 
@@ -30,39 +24,46 @@ Environment=PORT=8081
 [Install]
 WantedBy=multi-user.target
 """
-            
-            # サービスファイルを書き込み
-            service_path = "/etc/systemd/system/loadmeters.service"
-            print(f"Writing service file to {service_path}")
-            with open(service_path, "w") as f:
-                f.write(service_content)
-            print(f"Created service file at {service_path}")
-            
-            # データディレクトリの作成
-            data_dir = "/var/lib/loadmeters"
-            print(f"Creating data directory at {data_dir}")
-            os.makedirs(data_dir, exist_ok=True)
-            print("Created data directory")
-            
-            # systemdの再読み込みとサービスの有効化
-            print("Reloading systemd...")
-            subprocess.run(["systemctl", "daemon-reload"], check=True)
-            print("Systemd reloaded")
-            
-            print("Enabling loadmeters service...")
-            subprocess.run(["systemctl", "enable", "loadmeters"], check=True)
-            print("Service enabled")
-            
-            print("Starting loadmeters service...")
-            subprocess.run(["systemctl", "start", "loadmeters"], check=True)
-            print("Service started")
-            
-            print("Service setup completed successfully")
-        except Exception as e:
-            print(f"Error during installation: {e}", file=sys.stderr)
-            print(f"Error type: {type(e)}", file=sys.stderr)
-            print(f"Error details: {str(e)}", file=sys.stderr)
-            raise
+        
+        # サービスファイルを書き込み
+        service_path = "/etc/systemd/system/loadmeters.service"
+        print(f"Writing service file to {service_path}")
+        with open(service_path, "w") as f:
+            f.write(service_content)
+        print(f"Created service file at {service_path}")
+        
+        # データディレクトリの作成
+        data_dir = "/var/lib/loadmeters"
+        print(f"Creating data directory at {data_dir}")
+        os.makedirs(data_dir, exist_ok=True)
+        print("Created data directory")
+        
+        # systemdの再読み込みとサービスの有効化
+        print("Reloading systemd...")
+        subprocess.run(["systemctl", "daemon-reload"], check=True)
+        print("Systemd reloaded")
+        
+        print("Enabling loadmeters service...")
+        subprocess.run(["systemctl", "enable", "loadmeters"], check=True)
+        print("Service enabled")
+        
+        print("Starting loadmeters service...")
+        subprocess.run(["systemctl", "start", "loadmeters"], check=True)
+        print("Service started")
+        
+        print("Service setup completed successfully")
+    except Exception as e:
+        print(f"Error during service setup: {e}", file=sys.stderr)
+        print(f"Error type: {type(e)}", file=sys.stderr)
+        print(f"Error details: {str(e)}", file=sys.stderr)
+        raise
+
+class PostInstallCommand(install):
+    def run(self):
+        print("Starting installation...")
+        install.run(self)
+        print("Package installation completed")
+        setup_service()
 
 def uninstall_service():
     try:
@@ -73,7 +74,7 @@ def uninstall_service():
     except:
         pass
 
-print("Setting up package...")
+print("Loading setup.py...")
 
 setup(
     name="loadmeters",
