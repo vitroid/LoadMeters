@@ -4,6 +4,8 @@ import sys
 from setuptools import setup, find_packages
 from setuptools.command.install import install
 
+print("Loading setup.py...")
+
 class PostInstallCommand(install):
     def run(self):
         print("Starting installation...")
@@ -71,6 +73,8 @@ def uninstall_service():
     except:
         pass
 
+print("Setting up package...")
+
 setup(
     name="loadmeters",
     version="1.0.0",
@@ -96,6 +100,8 @@ setup(
     description="Load monitoring system for local network",
     python_requires=">=3.7",
 )
+
+print("Setup completed.")
 
 # アンインストール時の処理
 import atexit
