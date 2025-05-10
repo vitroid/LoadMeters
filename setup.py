@@ -25,18 +25,27 @@ Environment=PORT=8081
 WantedBy=multi-user.target
 """
         
-        # サービスファイルを書き込み
-        service_path = "/etc/systemd/system/loadmeters.service"
-        with open(service_path, "w") as f:
-            f.write(service_content)
-        
-        # データディレクトリの作成
-        os.makedirs("/var/lib/loadmeters", exist_ok=True)
-        
-        # systemdの再読み込みとサービスの有効化
-        subprocess.run(["systemctl", "daemon-reload"])
-        subprocess.run(["systemctl", "enable", "loadmeters"])
-        subprocess.run(["systemctl", "start", "loadmeters"])
+        try:
+            # サービスファイルを書き込み
+            service_path = "/etc/systemd/system/loadmeters.service"
+            with open(service_path, "w") as f:
+                f.write(service_content)
+            print(f"Created service file at {service_path}")
+            
+            # データディレクトリの作成
+            os.makedirs("/var/lib/loadmeters", exist_ok=True)
+            print("Created data directory at /var/lib/loadmeters")
+            
+            # systemdの再読み込みとサービスの有効化
+            subprocess.run(["systemctl", "daemon-reload"], check=True)
+            print("Reloaded systemd")
+            subprocess.run(["systemctl", "enable", "loadmeters"], check=True)
+            print("Enabled loadmeters service")
+            subprocess.run(["systemctl", "start", "loadmeters"], check=True)
+            print("Started loadmeters service")
+        except Exception as e:
+            print(f"Error during service setup: {e}")
+            raise
 
 def uninstall_service():
     try:
