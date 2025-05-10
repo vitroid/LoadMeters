@@ -53,7 +53,7 @@ app = FastAPI()
 api = FastAPI(root_path=f"/v{__api_version__}")
 app.mount(f"/v{__api_version__}", api)
 # Svelte? UIもこいつがserveする。
-app.mount("/", StaticFiles(directory="../loadmeters/public", html=True), name="static")
+app.mount("/", StaticFiles(directory="loadmeters/public", html=True), name="static")
 
 
 import http3

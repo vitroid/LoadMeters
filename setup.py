@@ -17,7 +17,7 @@ Type=simple
 User=root
 Restart=always
 RestartSec=1
-ExecStart=/usr/bin/python3 -m loadmeters_api.api
+ExecStart=/usr/bin/python3 -m uvicorn loadmeters_api.api:app --host 0.0.0.0 --port 8081
 WorkingDirectory=/var/lib/loadmeters
 Environment=PORT=8081
 
@@ -60,21 +60,8 @@ WantedBy=multi-user.target
 
 class PostInstallCommand(install):
     def run(self):
-        print("Starting installation...")
         install.run(self)
-        print("Package installation completed")
         setup_service()
-
-def uninstall_service():
-    try:
-        subprocess.run(["systemctl", "stop", "loadmeters"])
-        subprocess.run(["systemctl", "disable", "loadmeters"])
-        os.remove("/etc/systemd/system/loadmeters.service")
-        subprocess.run(["systemctl", "daemon-reload"])
-    except:
-        pass
-
-print("Loading setup.py...")
 
 setup(
     name="loadmeters",
@@ -93,25 +80,13 @@ setup(
             'loadmeters=loadmeters_api.api:main',
         ],
     },
-    cmdclass={
-        'install': PostInstallCommand,
-    },
     author="Your Name",
     author_email="your.email@example.com",
     description="Load monitoring system for local network",
     python_requires=">=3.7",
+    cmdclass={
+        'install': PostInstallCommand,
+    },
 )
 
-print("Setup completed.")
-
-# アンインストール時の処理
-import atexit
-atexit.register(uninstall_service)
-
-# 直接実行された場合の処理
-if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "setup":
-        setup_service()
-    else:
-        print("Usage: python3 setup.py setup")
-        sys.exit(1) 
+# 直接実行された場合の処理は不要 
