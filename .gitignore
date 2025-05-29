@@ -1,3 +1,6 @@
 loadmeters/package-lock.json
 API/servers.json.old
-loadmeters/package-lock.json
+__pycache__
+*.egg-info
+stat.json
+build/

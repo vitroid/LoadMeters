@@ -19,7 +19,7 @@ Type=simple
 User=root
 Restart=always
 RestartSec=1
-ExecStart=/usr/bin/python3 -m loadmeters_api.api
+ExecStart=/usr/bin/python3 -m uvicorn loadmeters_api.api:app --host 0.0.0.0 --port 8081
 WorkingDirectory=/var/lib/loadmeters
 Environment=PORT=8081
 
@@ -62,7 +62,6 @@ WantedBy=multi-user.target
 
 class PostInstallCommand(install):
     def run(self):
-        print("Starting installation...")
         install.run(self)
         print("Package installation completed")
 
