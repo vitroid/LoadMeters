@@ -4,7 +4,7 @@ export let oscolors=writable({})
 export let cwidth=writable({})
 export let cheight=writable({})
 
-const BASEURL = "http://" + location.hostname + ":8088"
+const BASEURL = "http://" + location.hostname + ":8081"
 
 
 

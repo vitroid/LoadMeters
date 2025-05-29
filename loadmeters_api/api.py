@@ -26,11 +26,22 @@ def uint32_to_ip(t):
 class MyListener(ServiceListener):
 
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-        print(name)
-        print(f"Service {name} updated")
+        info = zc.get_service_info(type_, name)
+        # 賢明な方法ではないが、ほかにthread間でデータを渡すうまい方法を知らない。
+        try:
+            with open("servers.json") as f:
+                data = json.load(f)
+        except:
+            data = {}
+        data[info.server] = {
+            "port": info.port,
+            "addresses": [uint32_to_ip(a) for a in info.addresses]
+        }
+        with open("servers.json", "w") as f:
+            json.dump(data, f, indent=4)
 
     def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-        print(f"Service {name} removed")
+        pass
 
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         info = zc.get_service_info(type_, name)
@@ -40,15 +51,12 @@ class MyListener(ServiceListener):
                 data = json.load(f)
         except:
             data = {}
-        # with open("debug.txt", "w") as f:
-        #     print([uint32_to_ip(a) for a in info.addresses], file=f)
         data[info.server] = {
             "port": info.port,
             "addresses": [uint32_to_ip(a) for a in info.addresses]
         }
         with open("servers.json", "w") as f:
             json.dump(data, f, indent=4)
-        print(f"Service {name} added, service info: {info}")
 
 
 app = FastAPI()
@@ -72,12 +80,12 @@ from requests.exceptions import Timeout, ConnectionError
 @app.on_event("startup")
 @repeat_every(seconds=5)  # 5 seconds  調子が悪くなったら、これをコメントアウトし、exceptでキャッチできていないエラーをさぐる
 async def update_history() -> None:
-# def update_history() -> None:
     logger = getLogger("uvicorn.app")
     fn = "servers.json"
     try:
         with open(fn) as f:
             servers = json.load(f)
+            logger.info(f"Current servers: {list(servers.keys())}")  # 現在のサーバー一覧をログ出力
     except:
         servers = {}
     fn = "stat.json"
@@ -211,6 +219,10 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_service()
         return
+    # データディレクトリの確認
+    data_dir = "/var/lib/loadmeters"
+    os.makedirs(data_dir, exist_ok=True)
+    os.chdir(data_dir)  # 作業ディレクトリを変更
     zeroconf = Zeroconf()
     listener = MyListener()
     browser = ServiceBrowser(zeroconf, "_loadreporter._tcp.local.", listener)
