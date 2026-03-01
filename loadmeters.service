@@ -1,12 +1,15 @@
 [Unit]
-Description="loadmeters"
-# After=proximity.target
+Description=Load Meters Monitoring Service
+After=network.target
 
 [Service]
-#Type=
+Type=simple
+User=root
 Restart=always
 RestartSec=1
-ExecStart=/usr/bin/python3 /home/matto/github/LoadMeters/ruptime2.py
+ExecStart=/usr/bin/python3 -m uvicorn loadmeters_api.api:app --host 0.0.0.0 --port 8081
+WorkingDirectory=/var/lib/loadmeters
+Environment=PORT=8081
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

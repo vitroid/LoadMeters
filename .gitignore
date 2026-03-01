@@ -1,3 +1,6 @@
-.vscode/configurationCache.log
-.vscode/dryrun.log
-.vscode/targets.log
+loadmeters/package-lock.json
+API/servers.json.old
+__pycache__
+*.egg-info
+stat.json
+build/
