@@ -87,8 +87,8 @@ setup(
     install_requires=[
         "fastapi",
         "uvicorn",
-        "requests",
-        "http3",
+        "httpx",  # requestsの非同期版
+        "aiofiles",  # 非同期ファイルI/O
         "zeroconf",
         "fastapi-utilities",
     ],
