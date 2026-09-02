@@ -1,0 +1,9 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">%h DiskReporter</name>
+  <service>
+    <type>_diskreporter._tcp</type>
+    <port>8087</port>
+  </service>
+</service-group>

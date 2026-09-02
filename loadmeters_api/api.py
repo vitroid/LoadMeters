@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_utilities import repeat_every
 from logging import getLogger, basicConfig, INFO, DEBUG
 __api_version__ = 1
+DATA_DIR = os.environ.get("LOADMETERS_DATA", "/var/lib/loadmeters")
 
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 try:
@@ -37,11 +38,12 @@ def uint32_to_ip(t):
 
 
 class MyListener(ServiceListener):
-    def __init__(self, loop=None):
+    def __init__(self, loop=None, json_filename="servers.json"):
         self._update_lock = asyncio.Lock()
         self._pending_updates = {}
         self._update_task = None
         self._loop = loop
+        self.json_filename = json_filename
 
     def set_loop(self, loop):
         """メインイベントループを設定"""
@@ -65,7 +67,7 @@ class MyListener(ServiceListener):
             )
         else:
             # イベントループが利用できない場合は同期的に処理
-            getLogger("uvicorn.app").warning("Event loop not available, skipping server update")
+            getLogger("uvicorn.error").warning("Event loop not available, skipping server update")
 
     async def _flush_updates(self):
         """ペンディング中の更新をファイルに書き込み"""
@@ -76,7 +78,7 @@ class MyListener(ServiceListener):
             
         try:
             # 現在のデータを読み込み
-            data = await read_json_file_async("servers.json")
+            data = await read_json_file_async(self.json_filename)
             
             # ペンディング中の更新を適用
             for server, info in self._pending_updates.items():
@@ -94,15 +96,15 @@ class MyListener(ServiceListener):
                 }
             
             # ファイルに書き込み
-            await write_json_file_async("servers.json", data)
+            await write_json_file_async(self.json_filename, data)
             
             # ペンディング更新をクリア
             n = len(self._pending_updates)
             self._pending_updates.clear()
-            getLogger("uvicorn.app").info(f"Updated servers.json with {n} servers")
+            getLogger("uvicorn.error").info(f"Updated {self.json_filename} with {n} servers")
             
         except Exception as e:
-            getLogger("uvicorn.app").error(f"Error updating servers.json: {e}")
+            getLogger("uvicorn.error").error(f"Error updating {self.json_filename}: {e}")
 
     def _on_service_resolved(self, zc: Zeroconf, type_: str, name: str, info) -> None:
         """解決済みサービス情報を反映（add_service/update_service から共通で使用）"""
@@ -116,7 +118,7 @@ class MyListener(ServiceListener):
         if info:
             self._on_service_resolved(zc, type_, name, info)
         else:
-            getLogger("uvicorn.app").debug(f"Zeroconf update_service: {name} get_service_info=None, will retry")
+            getLogger("uvicorn.error").debug(f"Zeroconf update_service: {name} get_service_info=None, will retry")
 
     def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         # サービス削除時の処理（必要に応じて実装）
@@ -124,7 +126,7 @@ class MyListener(ServiceListener):
 
     def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
         """mDNS でサービス発見時に呼ばれる。get_service_info は解決直後は None になりうるため遅延再取得する"""
-        log = getLogger("uvicorn.app")
+        log = getLogger("uvicorn.error")
         info = zc.get_service_info(type_, name)
         if info and info.addresses:
             log.info(f"Zeroconf: discovered {name} -> {info.server}:{info.port}")
@@ -149,67 +151,12 @@ class MyListener(ServiceListener):
 zeroconf_instance = None
 listener_instance = None
 browser_instance = None
+disk_listener_instance = None
+disk_browser_instance = None
+_supervisor_task = None
+_disk_supervisor_task = None
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """アプリケーションのライフサイクル管理"""
-    global zeroconf_instance, listener_instance, browser_instance
-    
-    # 起動時の処理
-    getLogger("uvicorn.app").info("Setting up Zeroconf service discovery...")
-    
-    # データディレクトリの確認
-    data_dir = "/var/lib/loadmeters"
-    os.makedirs(data_dir, exist_ok=True)
-    os.chdir(data_dir)
-    
-    # Zeroconfの設定（interfaces=All で全IFを監視し、同一ホストの loadreporter も検出しやすくする）
-    try:
-        zeroconf_instance = Zeroconf(interfaces=InterfacesType.All) if InterfacesType else Zeroconf()
-    except Exception:
-        zeroconf_instance = Zeroconf()
-    listener_instance = MyListener()
-    
-    # イベントループを設定
-    loop = asyncio.get_running_loop()
-    listener_instance.set_loop(loop)
-    
-    browser_instance = ServiceBrowser(zeroconf_instance, "_loadreporter._tcp.local.", listener_instance)
-    getLogger("uvicorn.app").info("Zeroconf service discovery started")
-    
-    # 定期的なupdate_history実行を開始
-    async def periodic_update():
-        while True:
-            try:
-                await update_history()
-                await asyncio.sleep(5)  # 5秒間隔
-            except Exception as e:
-                getLogger("uvicorn.app").error(f"Error in periodic update: {e}")
-                await asyncio.sleep(5)
-    
-    update_task = asyncio.create_task(periodic_update())
-    getLogger("uvicorn.app").info("Periodic update task started")
-    
-    yield
-    
-    # 終了時の処理
-    getLogger("uvicorn.app").info("Shutting down services...")
-    update_task.cancel()
-    try:
-        await update_task
-    except asyncio.CancelledError:
-        pass
-    
-    if browser_instance:
-        browser_instance.cancel()
-    if zeroconf_instance:
-        zeroconf_instance.close()
-    
-    # HTTPクライアントのクリーンアップ
-    await http_client.aclose()
-    getLogger("uvicorn.app").info("All services shut down")
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 api = FastAPI(root_path=f"/v{__api_version__}")
 app.mount(f"/v{__api_version__}", api)
 
@@ -232,13 +179,28 @@ def find_static_dir():
 static_dir = find_static_dir()
 if static_dir:
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
-    getLogger("uvicorn.app").info("Serving UI from %s", static_dir)
+    getLogger("uvicorn.error").info("Serving UI from %s", static_dir)
 else:
-    getLogger("uvicorn.app").warning("Static UI directory not found; / will 404")
+    getLogger("uvicorn.error").warning("Static UI directory not found; / will 404")
 
 
-# グローバル非同期HTTPクライアント
-http_client = httpx.AsyncClient(timeout=5.0)
+# 各ホスト独立。接続タイムアウトは短く、死んだ相手が他を巻き込まないようにする。
+http_client = httpx.AsyncClient(
+    timeout=httpx.Timeout(connect=1.5, read=3.0, write=3.0, pool=5.0),
+    limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+)
+# diskreporter は HTTP/1.0。keepalive すると相手が接続待ちで止まり、誤警告になる。
+disk_http_client = httpx.AsyncClient(
+    timeout=httpx.Timeout(connect=2.0, read=8.0, write=5.0, pool=5.0),
+    limits=httpx.Limits(max_connections=20, max_keepalive_connections=0),
+    headers={"Accept": "application/json", "Connection": "close"},
+)
+POLL_INTERVAL = 5.0
+DISK_POLL_INTERVAL = 300.0
+_stat_lock = asyncio.Lock()
+_disk_lock = asyncio.Lock()
+_poll_tasks = {}
+_disk_poll_tasks = {}
 
 async def call_api(url: str, **kwargs) -> str:
     """非同期HTTPリクエスト"""
@@ -246,10 +208,16 @@ async def call_api(url: str, **kwargs) -> str:
     return r.text
 
 # 非同期ファイル操作関数
+def _data_path(filename: str) -> str:
+    if os.path.isabs(filename):
+        return filename
+    return os.path.join(DATA_DIR, filename)
+
+
 async def read_json_file_async(filename: str) -> dict:
     """非同期でJSONファイルを読み込み"""
     try:
-        async with aiofiles.open(filename, 'r') as f:
+        async with aiofiles.open(_data_path(filename), 'r') as f:
             content = await f.read()
             return json.loads(content)
     except (FileNotFoundError, json.JSONDecodeError):
@@ -257,106 +225,297 @@ async def read_json_file_async(filename: str) -> dict:
 
 async def write_json_file_async(filename: str, data: dict) -> None:
     """非同期でJSONファイルに書き込み"""
-    async with aiofiles.open(filename, 'w') as f:
+    async with aiofiles.open(_data_path(filename), 'w') as f:
         await f.write(json.dumps(data, indent=4))
 
 from httpx import RequestError, TimeoutException
 
 # HTTPクライアントのクリーンアップはlifespanで処理
 
-async def fetch_server_info(server: str, info: dict, logger) -> tuple[str, dict]:
-    """個別サーバーから情報を非同期で取得"""
+def _ipv4_hosts(server: str, info: dict):
+    """問い合わせ先。IPv4 だけ使う（.local の同期 DNS でイベントループを止めない）。"""
+    hosts = []
+    for addr in info.get("addresses") or []:
+        if isinstance(addr, str) and addr.count(".") == 3 and addr not in hosts:
+            hosts.append(addr)
+    if not hosts:
+        hosts.append(server.rstrip("."))
+    return hosts
+
+
+async def fetch_server_info(server: str, info: dict, logger) -> tuple:
+    """1 台だけ問い合わせる。失敗しても他ホストのタスクには影響しない。"""
     import time
     start_time = time.time()
-    
     headers = {"Accept": "application/json"}
-    shortname = server.replace(".local.", "")
+    shortname = server.replace(".local.", "").rstrip(".")
     port = info["port"]
-    url = f'http://{server}:{port}/v1/info'
-    
-    try:
-        logger.debug(f"Fetching {url}")
-        response = await http_client.get(url, headers=headers)
-        elapsed = time.time() - start_time
-        logger.debug(f"Status {response.status_code} from {server} ({elapsed:.3f}s)")
-        
-        data = response.json()
-        logger.info(f"✓ {server} ({elapsed:.3f}s)")
-        
-        return shortname, {
-            "success": True,
-            "data": data,
-            "addresses": info["addresses"]
-        }
-    except (RequestError, TimeoutException) as e:
-        elapsed = time.time() - start_time
-        logger.warning(f"✗ {server} failed ({elapsed:.3f}s): {e}")
-        return shortname, {
-            "success": False,
-            "addresses": info["addresses"]
-        }
+    last_error = None
 
-# update_history関数は後でlifespanから呼び出される
-async def update_history() -> None:
+    for host in _ipv4_hosts(server, info):
+        url = f"http://{host}:{port}/v1/info"
+        try:
+            logger.debug("Fetching %s", url)
+            response = await http_client.get(url, headers=headers)
+            data = response.json()
+            elapsed = time.time() - start_time
+            logger.info("✓ %s via %s (%.3fs)", server, host, elapsed)
+            return shortname, {
+                "success": True,
+                "data": data,
+                "addresses": info.get("addresses") or [],
+            }
+        except (RequestError, TimeoutException) as e:
+            last_error = e
+            logger.debug("✗ %s via %s: %s", server, host, e)
+            continue
+
+    elapsed = time.time() - start_time
+    logger.warning("✗ %s failed (%.3fs): %s", server, elapsed, last_error)
+    return shortname, {
+        "success": False,
+        "addresses": info.get("addresses") or [],
+    }
+
+
+async def apply_one_result(shortname: str, server_result: dict) -> None:
+    """1 台分の結果だけ stat.json にマージする。"""
+    async with _stat_lock:
+        stat = await read_json_file_async("stat.json")
+        if shortname not in stat:
+            stat[shortname] = {}
+        if server_result["success"]:
+            data = server_result["data"]
+            stat[shortname] = stat[shortname] | data
+            stat[shortname]["address"] = server_result["addresses"]
+            stat[shortname]["history"] = stat[shortname].get("history", [])
+            stat[shortname]["history"].append(data["load"])
+        else:
+            stat[shortname]["history"] = stat[shortname].get("history", [])
+            stat[shortname]["history"].append(-1)
+        if len(stat[shortname]["history"]) > 60:
+            stat[shortname]["history"] = stat[shortname]["history"][-60:]
+        await write_json_file_async("stat.json", stat)
+
+
+async def poll_one_loop(server: str) -> None:
+    """1 ホスト専用ループ。他ホストの遅延・失敗と独立。"""
     import time
-    cycle_start = time.time()
-    logger = getLogger("uvicorn.app")
-    
-    # 非同期でファイル読み込み
-    io_start = time.time()
-    servers = await read_json_file_async("servers.json")
-    stat = await read_json_file_async("stat.json")
-    io_time = time.time() - io_start
-    
-    logger.info(f"📊 Update cycle: {len(servers)} servers, file I/O: {io_time:.3f}s")
-    logger.debug(f"Current servers: {list(servers.keys())}")
+    log = getLogger("uvicorn.error")
+    while True:
+        started = time.monotonic()
+        try:
+            servers = await read_json_file_async("servers.json")
+            info = servers.get(server)
+            if not info:
+                return
+            shortname, result = await fetch_server_info(server, info, log)
+            await apply_one_result(shortname, result)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.error("poll %s: %s", server, e)
+        await asyncio.sleep(max(0.1, POLL_INTERVAL - (time.monotonic() - started)))
 
-    # 全サーバーに対して並列でHTTPリクエストを実行
-    if servers:
-        fetch_start = time.time()
-        tasks = [fetch_server_info(server, info, logger) for server, info in servers.items()]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        fetch_time = time.time() - fetch_start
-        
-        # 結果を処理
-        successful_fetches = 0
-        for result in results:
-            if isinstance(result, Exception):
-                logger.error(f"Error in fetch_server_info: {result}")
+
+async def fetch_disk_info(server: str, info: dict, logger) -> tuple:
+    """diskreporter の /v1/info。失敗しても他ホストには影響しない。"""
+    import time
+    start_time = time.time()
+    headers = {"Accept": "application/json"}
+    shortname = server.replace(".local.", "").rstrip(".")
+    port = info["port"]
+    last_error = None
+
+    for host in _ipv4_hosts(server, info):
+        url = f"http://{host}:{port}/v1/info"
+        try:
+            logger.debug("Fetching disk %s", url)
+            response = await disk_http_client.get(url, headers=headers)
+            data = response.json()
+            elapsed = time.time() - start_time
+            logger.info("✓ disk %s via %s (%.3fs)", server, host, elapsed)
+            return shortname, {
+                "success": True,
+                "data": data,
+                "addresses": info.get("addresses") or [],
+            }
+        except (RequestError, TimeoutException) as e:
+            last_error = e
+            logger.debug("✗ disk %s via %s: %s", server, host, e)
+            continue
+
+    elapsed = time.time() - start_time
+    logger.warning("✗ disk %s failed (%.3fs): %s", server, elapsed, last_error)
+    return shortname, {
+        "success": False,
+        "addresses": info.get("addresses") or [],
+    }
+
+
+async def apply_one_disk_result(shortname: str, server_result: dict) -> None:
+    async with _disk_lock:
+        disk = await read_json_file_async("disk.json")
+        prev = disk.get(shortname) or {}
+        if server_result["success"]:
+            data = server_result["data"] or {}
+            raid = data.get("raid") or {}
+            disk[shortname] = {
+                "reachable": True,
+                "raid": raid,
+                "volumes": data.get("volumes") or [],
+                "updated": data.get("updated"),
+                "hostname": data.get("hostname") or shortname,
+                "address": server_result["addresses"],
+            }
+        else:
+            raid = dict(prev.get("raid") or {})
+            disk[shortname] = {
+                "reachable": False,
+                "raid": raid,
+                "volumes": prev.get("volumes") or [],
+                "updated": prev.get("updated"),
+                "hostname": prev.get("hostname") or shortname,
+                "address": server_result["addresses"],
+            }
+        await write_json_file_async("disk.json", disk)
+
+
+async def poll_one_disk_loop(server: str) -> None:
+    import time
+    log = getLogger("uvicorn.error")
+    while True:
+        started = time.monotonic()
+        try:
+            servers = await read_json_file_async("disks.json")
+            info = servers.get(server)
+            if not info:
+                return
+            shortname, result = await fetch_disk_info(server, info, log)
+            await apply_one_disk_result(shortname, result)
+            if not result.get("success"):
+                await asyncio.sleep(15.0)
                 continue
-                
-            shortname, server_result = result
-            
-            if shortname not in stat:
-                stat[shortname] = dict()
-            
-            if server_result["success"]:
-                successful_fetches += 1
-                data = server_result["data"]
-                stat[shortname] = stat[shortname] | data
-                stat[shortname]["address"] = server_result["addresses"]
-                stat[shortname]["history"] = stat[shortname].get("history", [])
-                stat[shortname]["history"].append(data["load"])
-            else:
-                stat[shortname]["history"] = stat[shortname].get("history", [])
-                stat[shortname]["history"].append(-1)
-            
-            # 履歴を60件に制限
-            if "history" in stat[shortname] and len(stat[shortname]["history"]) > 60:
-                stat[shortname]["history"] = stat[shortname]["history"][-60:]
-        
-        logger.info(f"📡 Parallel fetch: {successful_fetches}/{len(servers)} success ({fetch_time:.3f}s)")
-    
-    # 非同期でファイル書き込み
-    write_start = time.time()
-    await write_json_file_async("stat.json", stat)
-    write_time = time.time() - write_start
-    
-    total_time = time.time() - cycle_start
-    logger.info(f"💾 Cycle complete: {total_time:.3f}s total (I/O: {io_time:.3f}s + {write_time:.3f}s)")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.error("disk poll %s: %s", server, e)
+        await asyncio.sleep(max(1.0, DISK_POLL_INTERVAL - (time.monotonic() - started)))
 
 
-# update_history()
+async def supervise_disk_polls() -> None:
+    log = getLogger("uvicorn.error")
+    while True:
+        try:
+            servers = await read_json_file_async("disks.json")
+            for server in servers:
+                task = _disk_poll_tasks.get(server)
+                if task is None or task.done():
+                    _disk_poll_tasks[server] = asyncio.create_task(poll_one_disk_loop(server))
+                    log.info("Started disk poll task for %s", server)
+            for server, task in list(_disk_poll_tasks.items()):
+                if server not in servers:
+                    task.cancel()
+                    del _disk_poll_tasks[server]
+                    log.info("Stopped disk poll task for %s", server)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.error("supervise_disk_polls: %s", e)
+        await asyncio.sleep(2.0)
+
+
+async def supervise_polls() -> None:
+    """servers.json に合わせて、ホストごとの独立タスクを増減する。"""
+    log = getLogger("uvicorn.error")
+    while True:
+        try:
+            servers = await read_json_file_async("servers.json")
+            for server in servers:
+                task = _poll_tasks.get(server)
+                if task is None or task.done():
+                    _poll_tasks[server] = asyncio.create_task(poll_one_loop(server))
+                    log.info("Started poll task for %s", server)
+            for server, task in list(_poll_tasks.items()):
+                if server not in servers:
+                    task.cancel()
+                    del _poll_tasks[server]
+                    log.info("Stopped poll task for %s", server)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.error("supervise_polls: %s", e)
+        await asyncio.sleep(2.0)
+
+
+@app.on_event("startup")
+async def on_startup():
+    """FastAPI 0.85 は lifespan= を無視するので on_event で起動する。"""
+    global zeroconf_instance, listener_instance, browser_instance, _supervisor_task
+    global disk_listener_instance, disk_browser_instance, _disk_supervisor_task
+    log = getLogger("uvicorn.error")
+    log.info("Setting up data dir and independent poll tasks...")
+
+    os.makedirs(DATA_DIR, exist_ok=True)
+    try:
+        os.chdir(DATA_DIR)
+    except OSError as e:
+        log.warning("chdir %s failed: %s", DATA_DIR, e)
+
+    data_writable = os.access(DATA_DIR, os.W_OK)
+    log.info("DATA_DIR=%s writable=%s", DATA_DIR, data_writable)
+
+    if not data_writable:
+        log.warning("Data dir %s is not writable; serving UI/API only", DATA_DIR)
+        return
+
+    try:
+        zeroconf_instance = Zeroconf(interfaces=InterfacesType.All) if InterfacesType else Zeroconf()
+    except Exception:
+        zeroconf_instance = Zeroconf()
+    loop = asyncio.get_running_loop()
+    listener_instance = MyListener(json_filename="servers.json")
+    listener_instance.set_loop(loop)
+    browser_instance = ServiceBrowser(zeroconf_instance, "_loadreporter._tcp.local.", listener_instance)
+    disk_listener_instance = MyListener(json_filename="disks.json")
+    disk_listener_instance.set_loop(loop)
+    disk_browser_instance = ServiceBrowser(zeroconf_instance, "_diskreporter._tcp.local.", disk_listener_instance)
+    log.info("Zeroconf service discovery started (loadreporter + diskreporter)")
+
+    _supervisor_task = asyncio.create_task(supervise_polls())
+    _disk_supervisor_task = asyncio.create_task(supervise_disk_polls())
+    log.info("Independent per-server poll tasks started")
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    log = getLogger("uvicorn.error")
+    log.info("Shutting down services...")
+    for task in list(_poll_tasks.values()) + list(_disk_poll_tasks.values()):
+        task.cancel()
+    _poll_tasks.clear()
+    _disk_poll_tasks.clear()
+    if _supervisor_task is not None:
+        _supervisor_task.cancel()
+        try:
+            await _supervisor_task
+        except asyncio.CancelledError:
+            pass
+    if _disk_supervisor_task is not None:
+        _disk_supervisor_task.cancel()
+        try:
+            await _disk_supervisor_task
+        except asyncio.CancelledError:
+            pass
+    if disk_browser_instance:
+        disk_browser_instance.cancel()
+    if browser_instance:
+        browser_instance.cancel()
+    if zeroconf_instance:
+        zeroconf_instance.close()
+    await http_client.aclose()
+    await disk_http_client.aclose()
+    log.info("All services shut down")
 
 origins = [
     "*",
@@ -376,6 +535,12 @@ app.add_middleware(
 async def load_average():
     """統計情報を非同期で取得"""
     return await read_json_file_async("stat.json")
+
+
+@api.get("/disk")
+async def disk_status():
+    """NFS/RAID の低頻度スナップショット。"""
+    return await read_json_file_async("disk.json")
 
 
 def setup_service():

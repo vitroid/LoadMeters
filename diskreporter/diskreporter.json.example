@@ -1,0 +1,13 @@
+{
+  "port": 8087,
+  "raid": "arcconf",
+  "raid_scan_seconds": 300,
+  "user_scan_seconds": 3600,
+  "volumes": [
+    {
+      "path": "/export/home",
+      "label": "home",
+      "users": true
+    }
+  ]
+}

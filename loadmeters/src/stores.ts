@@ -3,6 +3,8 @@ export let uptimes=writable({})
 export let oscolors=writable({})
 export let cwidth=writable(0)
 export let cheight=writable(0)
+export let panelWidth=writable(200)
+export let disks=writable({})
 
 // 同一オリジン。UI と API は同じポートで配信する。
 const BASEURL = ""
@@ -101,6 +103,26 @@ export async function uptime(){
 }
 
 
+export async function fetchDisk(){
+    try {
+        const res = await fetchWithTimeout(BASEURL+'/v1/disk', {
+            method: "GET",
+        })
+        const result = await res.json()
+        if (!result || typeof result !== 'object' || Array.isArray(result)) {
+            disks.set({})
+            return false
+        }
+        disks.set(result)
+        return true
+    }
+    catch(err){
+        console.error("stores.ts: disk fetch error", err)
+        return false
+    }
+}
+
+
 export function hslToHex(h, s, l) {
     l /= 100;
     const a = s * Math.min(l, 1 - l) / 100;
@@ -112,7 +134,7 @@ export function hslToHex(h, s, l) {
     return `#${f(0)}${f(8)}${f(4)}`;
 }
 
-function palette(n){
+export function palette(n){
     if ( n < 0 ){
         return "#444"
     }

@@ -1,0 +1,19 @@
+#!/bin/sh
+# DiskReporter launcher. PYTHONPATH は /opt/diskreporter。
+ROOT=/opt/diskreporter
+PY="${DISKREPORTER_PYTHON:-}"
+if [ -z "$PY" ]; then
+  for c in python2.6 python2.7 python python3; do
+    if command -v "$c" >/dev/null 2>&1; then
+      PY="$c"
+      break
+    fi
+  done
+fi
+if [ -z "$PY" ]; then
+  echo "python not found" >&2
+  exit 1
+fi
+export PYTHONPATH="$ROOT"
+cd "$ROOT" || exit 1
+exec "$PY" -m diskreporter.server

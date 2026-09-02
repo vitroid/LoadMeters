@@ -72,7 +72,7 @@ User=root
 Restart=always
 RestartSec=1
 WorkingDirectory=/var/lib/loadmeters
-Environment=PORT=8081
+Environment=PORT=8080
 ExecStart=/opt/loadmeters/venv/bin/python -m loadmeters_api.api
 
 [Install]
@@ -153,13 +153,14 @@ sudo systemctl start loadmeters
 
 ## 設定
 
-- **ポート**: デフォルトは **8081**。サービス単位では `Environment=PORT=8081` で指定されています。変更する場合は `/etc/systemd/system/loadmeters.service` の `Environment=PORT=...` を編集したあと、`sudo systemctl daemon-reload` と `sudo systemctl restart loadmeters` を実行してください。
+- **ポート**: デフォルトは **8080**（UI と API を同じプロセスで配信）。サービス単位では `Environment=PORT=8080` で指定されています。変更する場合は `/etc/systemd/system/loadmeters.service` の `Environment=PORT=...` を編集したあと、`sudo systemctl daemon-reload` と `sudo systemctl restart loadmeters` を実行してください。
 - **データディレクトリ**: `/var/lib/loadmeters`（サービスファイルの `WorkingDirectory`）。ここに stat 用の JSON などが配置される想定です。
 
 ## 動作確認
 
-サービス起動後、API は次の URL で利用できます。
+サービス起動後、UI と API は同じポートで利用できます。
 
-- 例: `http://<サーバのIP>:8081/stat`
+- UI: `http://<サーバのIP>:8080/`
+- API: `http://<サーバのIP>:8080/v1/stat`
 
 ブラウザや `curl` でアクセスして応答を確認してください。

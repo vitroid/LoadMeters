@@ -1,6 +1,7 @@
 <script>
 	import Server from "./Server.svelte";
-	import { cheight, cwidth, uptimes } from "./stores.ts";
+	import NfsPanel from "./NfsPanel.svelte";
+	import { cheight, cwidth, disks, panelWidth, uptimes } from "./stores.ts";
 	let u = {}
 	let serverList = []
 	
@@ -16,22 +17,23 @@
 		}
 	})
 	
+	$: diskCount = $disks && typeof $disks === "object" ? Object.keys($disks).length : 0
+
 	$: serverCount = serverList.length
 	
 	// 実際に表示される列数を計算
 	// 各サーバーの高さの合計から、実際の列数を推定
 	let actualColumns = 1
 	$: {
-		if (serverCount > 0 && $cheight > 0) {
-			// 各サーバーの高さを計算して累積し、画面高さを超えたら次の列
+		if ((serverCount > 0 || diskCount > 0) && $cheight > 0) {
 			let currentColumnHeight = 0
 			let columns = 1
-			const maxHeight = $cheight - 40 // パディング分を引く
-			
+			const maxHeight = $cheight - 40
+
 			for (let hostname of serverList) {
 				const server = u[hostname]
 				if (server && server.relc) {
-					const panelHeight = Math.max(server.relc * maxHeight, 100) + 8 // gap分も加算
+					const panelHeight = Math.max(server.relc * maxHeight, 100) + 8
 					if (currentColumnHeight + panelHeight > maxHeight && currentColumnHeight > 0) {
 						columns++
 						currentColumnHeight = panelHeight
@@ -40,12 +42,22 @@
 					}
 				}
 			}
+			if (diskCount > 0) {
+				// 内容に合わせた低いパネル。列計算では伸ばさない。
+				const panelHeight = 28 + diskCount * 42 + 8
+				if (currentColumnHeight + panelHeight > maxHeight && currentColumnHeight > 0) {
+					columns++
+					currentColumnHeight = panelHeight
+				} else {
+					currentColumnHeight += panelHeight
+				}
+			}
 			actualColumns = columns
 		}
 	}
 	
 	// 実際の列数に基づいて各列の幅を計算
-	$: panelWidth = $cwidth > 0 ? Math.max(($cwidth - 40 - (actualColumns - 1) * 8) / actualColumns, 150) : 200
+	$: $panelWidth = $cwidth > 0 ? Math.max(($cwidth - 40 - (actualColumns - 1) * 8) / actualColumns, 150) : 200
 	
 	// $: console.log("🔍 Servers.svelte: servers:", serverCount, "columns:", actualColumns, "panelWidth:", panelWidth)
 </script>
@@ -57,11 +69,14 @@
     </div> -->
     {#each serverList as hostname}
         {#if u[hostname] && hostname}
-            <Server {hostname} info={u[hostname]} width={panelWidth} />
+            <Server {hostname} info={u[hostname]} width={$panelWidth} />
         {:else}
             <div class="error-panel">Error: {hostname}</div>
         {/if}
     {/each}
+    {#if diskCount > 0}
+        <NfsPanel width={$panelWidth} />
+    {/if}
 </div>
 
 <style>

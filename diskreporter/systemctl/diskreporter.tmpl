@@ -1,0 +1,16 @@
+[Unit]
+Description=Disk Reporter API Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=@PYTHON@ -m diskreporter.server
+WorkingDirectory=@WORKDIR@
+Environment=PYTHONPATH=@WORKDIR@
+Restart=always
+RestartSec=10
+Environment=PORT=8087
+
+[Install]
+WantedBy=multi-user.target

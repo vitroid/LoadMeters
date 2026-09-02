@@ -5,3 +5,4 @@ __pycache__
 stat.json
 build/
 .vscode
+.verify-data/
