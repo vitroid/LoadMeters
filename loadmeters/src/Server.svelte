@@ -1,13 +1,21 @@
 <script>
-	import { hslToHex, oscolors } from './stores.ts';
+	import { hslToHex, oscolors, cheight } from './stores.ts';
 	import Tooltip from "./Tooltip.svelte";
 	export let info
 	export let hostname
+	export let width = 200  // 固定幅
+	
+	// ウィンドウ高さに基づいてパネル高さを計算
+	$: maxHeight = $cheight > 0 ? $cheight - 40 : (typeof window !== 'undefined' ? window.innerHeight - 40 : 600)  // パディング分を引く
+	$: panelHeight = Math.max(info?.relc ? info.relc * maxHeight : 100, 100)
+	
+	// console.log("🔍 Server.svelte: Rendering", hostname, "height:", info?.relc, "history length:", info?.history?.length)
 
 	let heights = []
 	let colors = []
 	$: {
-		for(let i=0;i<info.history.length; i++){
+		if (info && info.history && Array.isArray(info.history)) {
+			for(let i=0;i<info.history.length; i++){
 			if ( info.history[i] >= 0 ){
 				let load = info.history[i] / info.cores
 				heights[i] = load
@@ -30,29 +38,43 @@
 				colors[i] = hslToHex(0, 100, 20)
 			}
 		}
+		} else {
+			console.error("🔍 Server.svelte: Invalid info or history for", hostname, info)
+		}
 	}
 </script>
 
-<div class="panel" style="height: {info.relc*100}%">
+<div class="panel" style="height: {panelHeight}px; width: {width}px;">
 	<div class="name">
-		{hostname}
+		{hostname} ({info?.relc ? (info.relc*100).toFixed(1) : '0'}%)
+		<br><small>{panelHeight.toFixed(0)}px / {width.toFixed(0)}px</small>
 	</div>
 	<div class="links">
 		<ul>
-			{#each info.address as a}
-			<li><a class="link" href="ssh://{a}">{a}</a></li>
-			{/each}
+			{#if info.network && Array.isArray(info.network)}
+				{#each info.network as net}
+				<li><a class="link" href="ssh://{net.ip_address}">{net.ip_address}</a></li>
+				{/each}
+			{:else if info.address && Array.isArray(info.address)}
+				{#each info.address as a}
+				<li><a class="link" href="ssh://{a}">{a}</a></li>
+				{/each}
+			{/if}
 		</ul>
 	</div>
 	<div class="os" style="background-color: {$oscolors[info.ostype]};">
 		<!-- triangle -->
 	</div>
 	<div class="load">
-		{#each info.history as _,i}
-		<!-- <div class="core" style="width:{width}px; height:{heights[i]*100}%; background-color: {colors[i]}"> -->
-			<div class="core" style="height:{heights[i]*100}%; background-color: {colors[i]}">
-			</div>
-		{/each}
+		{#if info.history && Array.isArray(info.history)}
+			{#each info.history as _,i}
+			<!-- <div class="core" style="width:{width}px; height:{heights[i]*100}%; background-color: {colors[i]}"> -->
+				<div class="core" style="height:{heights[i]*100}%; background-color: {colors[i]}">
+				</div>
+			{/each}
+		{:else}
+			<div class="error">No history data</div>
+		{/if}
 	</div>
 	<Tooltip {info} />
 </div>
@@ -63,13 +85,14 @@
 		flex-direction: column;
 		padding: 0px;
 		background-color: #ddd;
-		/* border-radius: 15px; */
+		border-radius: 15px;
 		margin: 4px;
 		-webkit-filter:drop-shadow(5px 5px 5px rgba(0, 0, 0, 0.2));
 		-moz-filter:drop-shadow(5px 5px 5px rgba(0, 0, 0, 0.2));
   		-ms-filter:drop-shadow(5px 5px 5px rgba(0, 0, 0, 0.2));
   		filter:drop-shadow(5px 5px 5px rgba(0, 0, 0, 0.2));
 		position: relative;
+		min-height: 100px;
 	}
 	.name {
 		position: absolute;

@@ -5,8 +5,10 @@
 	let usage
 	$: {
 		usage = "<ul>"
-		for(let user in info.usage){
-			usage += "<li>" + user + ":" + (info.usage[user]/100).toFixed(0) + "</li>"
+		if (info && info.usage && typeof info.usage === 'object') {
+			for(let user in info.usage){
+				usage += "<li>" + user + ":" + (info.usage[user]/100).toFixed(0) + "</li>"
+			}
 		}
 		usage += "</ul>"
 	}
@@ -18,13 +20,16 @@
 <div class="tooltip-item" style="background-color: {$oscolors[info.ostype]};">
     <!-- IP:	{info.address}<br /> -->
     OS: {info.ostype}<br />
+    {#if info.version}
+    LM version: {info.version}<br />
+    {/if}
     bogoMIPS: {info.mips.toFixed(0)}<br />
 	{#if ("GFlops" in info)}
 	MFlops / 1core: {(info.GFlops*1000 / info.cores).toFixed(0)}<br />
 	{/if}
     Cores: {info.cores}<br />
     {@html usage}
-    {#if info.gpu}
+    {#if info.gpu && Array.isArray(info.gpu) && info.gpu.length > 0}
     GPU:
     <ul>
         {#each info.gpu as gpu}

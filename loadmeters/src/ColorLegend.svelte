@@ -1,14 +1,14 @@
 <script>
 	import { oscolors } from "./stores.ts";
 
-	let pal;
+	let pal = {};
 	oscolors.subscribe(_=>{
-		pal=_;
+		pal = _ || {};
 	})
 </script>
 
 <div class="container">
-    {#each Object.keys(pal) as os}
+    {#each Object.keys(pal || {}) as os}
 	<div class="legend" style="background-color: {pal[os]}" >
 		{os}
 	</div>

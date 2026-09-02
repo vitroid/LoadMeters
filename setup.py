@@ -19,9 +19,9 @@ Type=simple
 User=root
 Restart=always
 RestartSec=1
-ExecStart=/usr/bin/python3 -m uvicorn loadmeters_api.api:app --host 0.0.0.0 --port 8081
+ExecStart=/usr/bin/python3 -m loadmeters_api.api
 WorkingDirectory=/var/lib/loadmeters
-Environment=PORT=8081
+Environment=PORT=8080
 
 [Install]
 WantedBy=multi-user.target
@@ -84,6 +84,10 @@ setup(
     name="loadmeters",
     version="1.0.0",
     packages=find_packages(),
+    include_package_data=True,
+    package_data={
+        "loadmeters_api": ["public/*", "public/build/*"],
+    },
     install_requires=[
         "fastapi",
         "uvicorn",

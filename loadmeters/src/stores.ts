@@ -1,10 +1,11 @@
 import { writable } from 'svelte/store';
 export let uptimes=writable({})
 export let oscolors=writable({})
-export let cwidth=writable({})
-export let cheight=writable({})
+export let cwidth=writable(0)
+export let cheight=writable(0)
 
-const BASEURL = "http://" + location.hostname + ":8081"
+// 同一オリジン。UI と API は同じポートで配信する。
+const BASEURL = ""
 
 
 
@@ -34,22 +35,49 @@ export async function uptime(){
             method: "GET",
         })
         res.json().then(result=>{
-            // let u = JSON.parse(result)
+            console.log("🔍 stores.ts: Raw API response", typeof result, result)
+            
+            // データの妥当性チェック
+            if (!result || typeof result !== 'object' || Array.isArray(result)) {
+                console.error("🔍 stores.ts: Invalid API response", result)
+                uptimes.set({})
+                return
+            }
+            
             let u = result
+            console.log("🔍 stores.ts: Server list", Object.keys(u))
+            
             // 計算力を計算する。
             let maxc = 0;
             for(let hostname in u){
+                if (!u[hostname].cores || !u[hostname].mips) {
+                    console.warn("🔍 stores.ts: Missing cores/mips for", hostname, u[hostname])
+                    continue;
+                }
                 const c=u[hostname].cores*u[hostname].mips
                 if ( maxc < c ){
                     maxc = c;
                 }
             }
+            console.log("🔍 stores.ts: Max compute power", maxc)
+            
             // 相対計算力を格納する。
             for(let hostname in u){
+                if (!u[hostname].cores || !u[hostname].mips || u[hostname].cores <= 0 || u[hostname].mips <= 0) {
+                    console.warn("🔍 stores.ts: Invalid cores/mips for", hostname, "cores:", u[hostname].cores, "mips:", u[hostname].mips)
+                    u[hostname].relc = 0.2; // デフォルト値を0.2に設定（20%）
+                    u[hostname].cores = u[hostname].cores || 1; // デフォルト値
+                    u[hostname].mips = u[hostname].mips || 1000; // デフォルト値
+                    continue;
+                }
                 const c=u[hostname].cores*u[hostname].mips
-                u[hostname].relc = c/maxc
+                u[hostname].relc = maxc > 0 ? c/maxc : 0.2
+                console.log("🔍 stores.ts: Relative compute for", hostname, u[hostname].relc)
             }
+            
+            console.log("🔍 stores.ts: Setting uptimes with", Object.keys(u).length, "servers")
             uptimes.set(u)
+            
             let c={}
             for(let hostname in u){
                 let os=u[hostname].ostype
@@ -57,11 +85,17 @@ export async function uptime(){
                     c[os] = palettes[Object.keys(c).length]
                 }
             }
+            console.log("🔍 stores.ts: OS colors", c)
             oscolors.set(c)
+        }).catch(err => {
+            console.error("🔍 stores.ts: JSON parsing error", err)
+            uptimes.set({})
         })
         return true;
     }
     catch(err){
+        console.error("🔍 stores.ts: Fetch error", err)
+        uptimes.set({})
         return false;
     }
 }

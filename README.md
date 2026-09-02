@@ -7,39 +7,83 @@
 - Python 3.7 以上
 - systemd を使用する Linux（Ubuntu 15.04 以降、CentOS 7 以降など）
 
-## インストール
+## インストール（推奨: /opt venv + systemd 自動設定）
 
-**サービスとして動かす場合**は、systemd が使うのは **システムの `/usr/bin/python3`** なので、**root でインストール**してください。そうしないとサービス起動時に `ModuleNotFoundError: No module named 'loadmeters_api'` で落ちます。
+最も簡単な方法は、リポジトリルートで `install.sh` を実行し、/opt 配下に専用の仮想環境と systemd サービスを自動でセットアップする方法です。
 
 ```bash
-# サービスで使う場合（推奨）
-sudo pip3 install -e .
-# または
-sudo python3 -m pip install -e .
-
-# 手元でだけ動かす場合
-pip install -e .
+git clone https://github.com/vitroid/LoadMeters.git
+cd LoadMeters
+sudo bash install.sh
 ```
+
+このスクリプトは、以下を自動で行います。
+
+1. ソースを `/opt/loadmeters/src` にコピー
+2. `/opt/loadmeters/venv` に仮想環境を作成し、その中に LoadMeters と依存パッケージをインストール
+3. データ用ディレクトリ `/var/lib/loadmeters` を作成
+4. `/etc/systemd/system/loadmeters.service` を作成（`ExecStart=/opt/loadmeters/venv/bin/python -m loadmeters_api.api`）
+5. `systemctl daemon-reload` / `enable` / `restart` を実行してサービスを起動
+
+**重要:** Python パッケージはすべて `/opt/loadmeters/venv` の中にインストールされるため、壊れたシステム Python や他のアプリには影響しません。
+
+## インストール（pip + `loadmeters setup`）
+
+専用 venv を作らず、システム Python に直接入れて済ませたい場合は、次の 2 コマンドでパッケージのインストールから systemd の設定・起動まで行えます。
+
+```bash
+sudo pip install git+https://github.com/vitroid/LoadMeters.git
+sudo loadmeters setup
+```
+
+`loadmeters setup` は以下を自動で行います。
+
+1. データ用ディレクトリ `/var/lib/loadmeters` を作成
+2. `/etc/systemd/system/loadmeters.service` を作成（`ExecStart=/usr/bin/python3 -m loadmeters_api.api`）
+3. `systemctl daemon-reload` / `enable` / `start` を実行してサービスを起動
+
+`loadmeters` コマンドが PATH にない場合は、次でも同じです。
+
+```bash
+sudo python3 -m loadmeters_api.api setup
+```
+
+**注意:** サービスは `/usr/bin/python3` で動くため、`pip install` も **root（`sudo`）で実行**し、同じ Python にパッケージが入るようにしてください。ユーザー環境だけに入れた場合、サービス起動時に `ModuleNotFoundError` になることがあります（[トラブルシューティング](#トラブルシューティング起動しないとき) 参照）。
 
 ## サービスとして稼働させる方法
 
-API を systemd サービスとして常時稼働させる手順です。**root 権限が必要です。** 上記のとおり、先に **sudo pip3 install -e .** でインストールしておいてください。
+`install.sh` または `loadmeters setup` を実行すると、自動的に systemd サービスとして常駐するように設定されます。通常は追加の作業は不要です。
 
-### 方法 A: setup コマンドで一括設定（推奨）
+以下は、手動で設定する場合の参考情報です。
 
-パッケージをインストールしたあと、次のコマンドでサービス登録・起動まで行います。
+### 方法 A: 既存の venv を使って systemd を手動設定する
+
+すでに `/opt/loadmeters/venv` と `/opt/loadmeters/src` が作成されている場合、次の内容でサービスファイルを作成できます。
 
 ```bash
-sudo python3 setup.py setup
+sudo tee /etc/systemd/system/loadmeters.service >/dev/null <<'EOF'
+[Unit]
+Description=Load Meters Monitoring Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Restart=always
+RestartSec=1
+WorkingDirectory=/var/lib/loadmeters
+Environment=PORT=8081
+ExecStart=/opt/loadmeters/venv/bin/python -m loadmeters_api.api
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo mkdir -p /var/lib/loadmeters
+sudo systemctl daemon-reload
+sudo systemctl enable loadmeters
+sudo systemctl start loadmeters
 ```
-
-このコマンドで以下が行われます。
-
-1. `/etc/systemd/system/loadmeters.service` にサービスファイルを作成
-2. データ用ディレクトリ `/var/lib/loadmeters` を作成
-3. `systemctl daemon-reload`
-4. サービスを有効化（`systemctl enable loadmeters`）
-5. サービスを起動（`systemctl start loadmeters`）
 
 ### 方法 B: 手動で systemd を設定する
 
@@ -90,7 +134,7 @@ sudo python3 setup.py setup
 
    ```bash
    cd /var/lib/loadmeters
-   sudo /usr/bin/python3 -m uvicorn loadmeters_api.api:app --host 0.0.0.0 --port 8081
+   sudo /opt/loadmeters/venv/bin/python -m loadmeters_api.api
    ```
 
    同じエラーがターミナルに表示されるので、原因の切り分けに使えます。

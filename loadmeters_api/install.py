@@ -25,7 +25,7 @@ Environment=POETRY_HOME=/opt/poetry
 Environment=PATH=/opt/poetry/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/opt/poetry/bin/poetry run loadmeters
 WorkingDirectory=/var/lib/loadmeters
-Environment=PORT=8081
+Environment=PORT=8080
 
 [Install]
 WantedBy=multi-user.target

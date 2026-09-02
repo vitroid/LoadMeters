@@ -213,12 +213,28 @@ app = FastAPI(lifespan=lifespan)
 api = FastAPI(root_path=f"/v{__api_version__}")
 app.mount(f"/v{__api_version__}", api)
 
-# Svelte? UIもこいつがserveする。
-static_dir = "/var/lib/loadmeters/public"
-if os.path.exists(static_dir):
+def find_static_dir():
+    """Svelte のビルド成果物 (index.html) があるディレクトリを探す。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.environ.get("LOADMETERS_STATIC", ""),
+        "/var/lib/loadmeters/public",
+        os.path.join(here, "public"),
+        os.path.join(here, "..", "loadmeters", "public"),
+    ]
+    for path in candidates:
+        if path and os.path.isfile(os.path.join(path, "index.html")):
+            return os.path.abspath(path)
+    return None
+
+
+# Svelte UI も同じプロセスで配信する（デフォルトポート 8080）。
+static_dir = find_static_dir()
+if static_dir:
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    getLogger("uvicorn.app").info("Serving UI from %s", static_dir)
 else:
-    getLogger("uvicorn.app").warning(f"Static directory {static_dir} does not exist")
+    getLogger("uvicorn.app").warning("Static UI directory not found; / will 404")
 
 
 # グローバル非同期HTTPクライアント
@@ -377,7 +393,7 @@ Restart=always
 RestartSec=1
 ExecStart=/usr/bin/python3 -m loadmeters_api.api
 WorkingDirectory=/var/lib/loadmeters
-Environment=PORT=8081
+Environment=PORT=8080
 
 [Install]
 WantedBy=multi-user.target
@@ -423,7 +439,7 @@ def main():
         return
 
     host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8081"))
+    port = int(os.environ.get("PORT", "8080"))
     getLogger().info("Starting loadmeters API at http://%s:%s", host, port)
     # アプリケーションオブジェクトを直接渡すことで、モジュール名に依存しない起動にする
     uvicorn.run(app, host=host, reload=False, port=port)
