@@ -82,6 +82,162 @@ def parse_arcconf(text):
     }
 
 
+PD_GOOD_STATES = ("online", "optimal", "hot spare", "ready", "raw", "global hot spare", "dedicated hot spare")
+PD_ERROR_COUNTERS = (
+    "Hardware Error Count",
+    "Medium Error Count",
+    "Parity Error Count",
+    "Link Failure Count",
+    "Aborted Command Count",
+)
+
+
+def _kv(line):
+    if ":" not in line:
+        return None, None
+    key, value = line.split(":", 1)
+    return key.strip(), value.strip()
+
+
+def _celsius(value):
+    m = re.match(r"\s*(-?\d+)\s*C", value or "")
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def _int_or_none(value):
+    m = re.match(r"\s*(\d+)", value or "")
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def parse_arcconf_pd(text):
+    blocks = []
+    current = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        m = re.match(r"Device #(\d+)$", line)
+        if m:
+            current = {"_id": m.group(1)}
+            blocks.append(current)
+            continue
+        if current is None:
+            continue
+        if line.startswith("Device is "):
+            current["_kind"] = line[len("Device is "):]
+            continue
+        key, value = _kv(line)
+        if key and key not in current:
+            current[key] = value
+
+    disks = []
+    for b in blocks:
+        kind = b.get("_kind") or ""
+        if "enclosure" in kind.lower() or "State" not in b:
+            continue
+        location = b.get("Reported Location") or ""
+        m = re.search(r"Slot\s*(\d+)", location)
+        cd = re.search(r"Connector\s*(\d+),\s*Device\s*(\d+)", location)
+        if m:
+            slot = m.group(1)
+        elif cd:
+            slot = "%s:%s" % (cd.group(1), cd.group(2))
+        else:
+            slot = b["_id"]
+        state = b.get("State") or "unknown"
+        smart = (b.get("S.M.A.R.T.") or "").lower()
+        smart_warnings = _int_or_none(b.get("S.M.A.R.T. warnings"))
+        errors = {}
+        for name in PD_ERROR_COUNTERS:
+            n = _int_or_none(b.get(name))
+            if n:
+                errors[name.replace(" Count", "")] = n
+        warn = []
+        if smart == "yes":
+            warn.append("S.M.A.R.T. failure predicted")
+        if smart_warnings:
+            warn.append("S.M.A.R.T. warnings %d" % smart_warnings)
+        disks.append({
+            "id": b["_id"],
+            "slot": slot,
+            "location": location,
+            "kind": kind,
+            "state": state,
+            "ok": state.lower().startswith(PD_GOOD_STATES),
+            "vendor": b.get("Vendor") or "",
+            "model": b.get("Model") or "",
+            "serial": b.get("Serial number") or "",
+            "size": b.get("Total Size") or "",
+            "temperature": _celsius(b.get("Temperature")),
+            "smart_warnings": smart_warnings,
+            "errors": errors,
+            "warnings": warn,
+        })
+    return disks
+
+
+def parse_arcconf_ad(text):
+    info = {}
+    section = ""
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or set(line) <= set("-"):
+            continue
+        key, value = _kv(line)
+        if key is None:
+            section = line
+            continue
+        if "battery" in section.lower() or "zmm" in section.lower() or "backup" in section.lower():
+            if key in ("Status", "Overall Backup Unit Status") and "backup" not in info:
+                info["backup"] = value
+            continue
+        if key not in info:
+            info[key] = value
+    if "Controller Status" not in info:
+        return None
+    temp_text = info.get("Temperature") or ""
+    return {
+        "model": info.get("Controller Model") or "",
+        "status": info.get("Controller Status"),
+        "ok": info.get("Controller Status", "").lower() == "optimal",
+        "temperature": _celsius(temp_text),
+        "temperature_abnormal": "abnormal" in temp_text.lower(),
+        "defunct": _int_or_none(info.get("Defunct disk drive count")),
+        "backup": info.get("backup") or "",
+    }
+
+
+def merge_arcconf_health(result, disks, controller):
+    bad = []
+    warnings = []
+    for d in disks:
+        if not d["ok"]:
+            bad.append("slot %s %s" % (d["slot"], d["state"]))
+        for w in d["warnings"]:
+            warnings.append("slot %s: %s" % (d["slot"], w))
+    if controller:
+        if not controller["ok"]:
+            bad.append("controller " + (controller["status"] or "unknown"))
+        if controller["defunct"]:
+            bad.append("defunct disks %d" % controller["defunct"])
+        if controller["temperature_abnormal"]:
+            warnings.append("controller temperature abnormal")
+        if "fail" in controller["backup"].lower():
+            warnings.append("cache backup " + controller["backup"])
+    result["disks"] = disks
+    result["controller"] = controller
+    result["warnings"] = warnings
+    if bad:
+        if result["ok"]:
+            result["status"] = ", ".join(bad)
+        else:
+            result["status"] = result["status"] + ", " + ", ".join(bad)
+        result["ok"] = False
+    return result
+
+
 def collect_arcconf():
     if not os.path.isfile(ARCCONF_BIN) and not os.environ.get("ARCCONF"):
         return {
@@ -101,7 +257,16 @@ def collect_arcconf():
             "arrays": [],
             "detail": str(e),
         }
-    return parse_arcconf(text)
+    result = parse_arcconf(text)
+    try:
+        disks = parse_arcconf_pd(_run([ARCCONF_BIN, "getconfig", "1", "PD"]))
+    except OSError:
+        disks = []
+    try:
+        controller = parse_arcconf_ad(_run([ARCCONF_BIN, "getconfig", "1", "AD"]))
+    except OSError:
+        controller = None
+    return merge_arcconf_health(result, disks, controller)
 
 
 def parse_mdstat(text):

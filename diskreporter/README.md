@@ -31,7 +31,7 @@ Python **2.6 以降**（CentOS 6 の標準 Python を含む）と 3.x。pip パ�
 }
 ```
 
-- `arcconf`: `/usr/StorMan/arcconf getconfig 1 LD`（`ARCCONF` でパス変更可）
+- `arcconf`: `/usr/StorMan/arcconf getconfig 1 LD`（`ARCCONF` でパス変更可）。加えて `getconfig 1 PD`（物理ディスクの状態・S.M.A.R.T.・温度・エラーカウンタ）と `getconfig 1 AD`（コントローラ状態・温度・キャッシュバックアップ）も読み、`raid.disks` / `raid.controller` / `raid.warnings` として返す。Failed なディスクや Optimal でないコントローラは `ok: false`、S.M.A.R.T. 警告は `warnings` のみ（LoadMeters ではオレンジ枠）。
 - `mdadm`: `/proc/mdstat`
 - `none`: RAID なし（容量のみ）
 

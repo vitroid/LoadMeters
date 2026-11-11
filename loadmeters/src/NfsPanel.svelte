@@ -174,8 +174,50 @@
 		return !d || d.reachable === false
 	}
 
+	function isWarn(d) {
+		return !isBad(d) && !isDown(d) && d.raid && d.raid.warnings && d.raid.warnings.length > 0
+	}
+
+	function fmtTemp(t) {
+		return t === null || t === undefined ? "" : t + "°C"
+	}
+
+	function fmtAgo(ts) {
+		if (!ts) return ""
+		const s = Math.max(0, Date.now() / 1000 - ts)
+		if (s < 120) return Math.round(s) + "s ago"
+		if (s < 7200) return Math.round(s / 60) + "min ago"
+		return Math.round(s / 3600) + "h ago"
+	}
+
+	function diskTitle(disk) {
+		const parts = [`slot ${disk.slot}: ${disk.state}`, disk.vendor, disk.model, disk.serial, disk.size, fmtTemp(disk.temperature)]
+		for (let k of Object.keys(disk.errors || {})) parts.push(`${k} ${disk.errors[k]}`)
+		return parts.filter(Boolean).join("  ")
+	}
+
+	function diskSummary(disks) {
+		const counts = {}
+		for (let disk of disks) counts[disk.state] = (counts[disk.state] || 0) + 1
+		return Object.keys(counts).map(s => `${counts[s]} ${s}`).join(", ")
+	}
+
+	function maxTemp(disks) {
+		const ts = disks.map(disk => disk.temperature).filter(t => t !== null && t !== undefined)
+		return ts.length ? Math.max(...ts) : null
+	}
+
+	function noteworthyDisks(disks) {
+		return disks.filter(disk => !disk.ok || (disk.warnings && disk.warnings.length) || Object.keys(disk.errors || {}).length)
+	}
+
 	let hover = null
 	let hideTimer = null
+
+	$: hd = hover ? data[hover.hostname] : null
+	$: raid = (hd && hd.raid) || {}
+	$: tipDisks = raid.disks || []
+	$: ctrl = raid.controller
 
 	function portalTip(node, rect) {
 		document.body.appendChild(node)
@@ -201,16 +243,25 @@
 		}
 	}
 
-	function showTip(e, seg) {
-		if (hideTimer) {
-			clearTimeout(hideTimer)
-			hideTimer = null
-		}
-		const r = e.currentTarget.getBoundingClientRect()
-		hover = {
-			seg,
-			rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
-		}
+	function rectOf(el) {
+		const r = el.getBoundingClientRect()
+		return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+	}
+
+	function showRowTip(e, row) {
+		keepTip()
+		const rowRect = rectOf(e.currentTarget)
+		hover = { hostname: row.hostname, seg: null, rowRect, rect: rowRect }
+	}
+
+	function showSegTip(e, row, seg) {
+		keepTip()
+		const rowRect = rectOf(e.currentTarget.closest(".row"))
+		hover = { hostname: row.hostname, seg, rowRect, rect: rectOf(e.currentTarget) }
+	}
+
+	function leaveSeg() {
+		if (hover) hover = { ...hover, seg: null, rect: hover.rowRect }
 	}
 
 	function delayHide() {
@@ -240,15 +291,17 @@
 	</div>
 	<div class="stack">
 		{#each rows as row}
-		<div class="row" class:bad={isBad(row.d)} class:down={isDown(row.d)}>
+		<div class="row" class:bad={isBad(row.d)} class:warn={isWarn(row.d)} class:down={isDown(row.d)}
+			on:mouseenter={(e) => showRowTip(e, row)}
+			on:mouseleave={delayHide}>
 			{#if row.vol}
 			<div class="vol" style="width: {volWidthPct(row.vol)}%;">
 				<div class="used" style="width: {usedPct(row.vol)}%;">
 						{#each segments(row.vol, colorByUser) as seg (seg.id)}
 					<div class="seg"
 						style="width: {seg.pct}%; background: {seg.color};"
-						on:mouseenter={(e) => showTip(e, seg)}
-						on:mouseleave={delayHide}>
+						on:mouseenter={(e) => showSegTip(e, row, seg)}
+						on:mouseleave={leaveSeg}>
 					</div>
 					{/each}
 				</div>
@@ -269,17 +322,66 @@
 </div>
 {/if}
 
-{#if hover && hover.seg}
+{#if hover}
 <div class="tipfloat"
 	use:portalTip={hover.rect}
 	on:mouseenter={keepTip}
 	on:mouseleave={delayHide}>
+	{#if hover.seg}
 	<div class="tiptitle">{hover.seg.label}</div>
 	<div class="tipamt">{fmtBytes(hover.seg.bytes)}</div>
 	{#if hover.seg.users && hover.seg.users.length > 1}
 		{#each hover.seg.users as u}
 		<div class="tipuser"><span>{u.name}</span><span>{fmtBytes(u.bytes)}</span></div>
 		{/each}
+	{/if}
+	<div class="tipsep"></div>
+	{/if}
+	<div class="tiptitle">{hover.hostname} health</div>
+	{#if isDown(hd)}
+	<div class="tipbad">unreachable (last report {fmtAgo(hd && hd.updated) || "never"})</div>
+	{/if}
+	<div class:tipbad={raid.ok === false} class:tipok={raid.ok === true}>
+		{raid.backend || "raid"}: {raid.status || "unknown"}
+	</div>
+	{#each raid.arrays || [] as arr}
+	<div class="tipuser">
+		<span>{arr.name || "LD " + arr.id}{arr.level ? " (RAID " + arr.level + ")" : ""}</span>
+		<span class:tipbad={arr.state && arr.state.toLowerCase() !== "optimal" && arr.state !== "active"}>{arr.state}</span>
+	</div>
+	{/each}
+	{#if ctrl}
+	<div class="tipuser">
+		<span>controller{ctrl.model ? " " + ctrl.model : ""}</span>
+		<span class:tipbad={!ctrl.ok}>{ctrl.status} {fmtTemp(ctrl.temperature)}</span>
+	</div>
+	{#if ctrl.backup}
+	<div class="tipuser"><span>cache backup</span><span>{ctrl.backup}</span></div>
+	{/if}
+	{/if}
+	{#if tipDisks.length}
+	<div class="tipuser">
+		<span>disks: {diskSummary(tipDisks)}</span>
+		<span>{maxTemp(tipDisks) !== null ? "max " + fmtTemp(maxTemp(tipDisks)) : ""}</span>
+	</div>
+	<div class="chips">
+		{#each tipDisks as disk}
+		<span class="chip" class:chipbad={!disk.ok} class:chipwarn={disk.ok && disk.warnings && disk.warnings.length}
+			title={diskTitle(disk)}>{disk.slot}</span>
+		{/each}
+	</div>
+	{#each noteworthyDisks(tipDisks) as disk}
+	<div class="tipnote" class:tipbad={!disk.ok}>{diskTitle(disk)}</div>
+	{/each}
+	{/if}
+	{#each raid.warnings || [] as w}
+	<div class="tipwarn">⚠ {w}</div>
+	{/each}
+	{#if raid.ok === false && raid.detail}
+	<pre class="tipdetail">{raid.detail}</pre>
+	{/if}
+	{#if hd && hd.updated}
+	<div class="tipamt">updated {fmtAgo(hd.updated)}</div>
 	{/if}
 </div>
 {/if}
@@ -334,6 +436,9 @@
 	}
 	.row.bad {
 		outline: 2px solid #ff3355;
+	}
+	.row.warn {
+		outline: 2px solid #ffaa33;
 	}
 	.row.down {
 		opacity: 0.55;
@@ -413,5 +518,50 @@
 		justify-content: space-between;
 		gap: 1.5em;
 		white-space: nowrap;
+	}
+	.tipsep {
+		border-top: 1px solid #444;
+		margin: 6px 0;
+	}
+	.tipok {
+		color: #7ddc8a;
+	}
+	.tipbad {
+		color: #ff6680;
+	}
+	.tipwarn {
+		color: #ffbb55;
+	}
+	.tipnote {
+		font-size: 11px;
+		color: #ccc;
+	}
+	.tipdetail {
+		font-size: 10px;
+		white-space: pre-wrap;
+		max-height: 10em;
+		overflow-y: auto;
+		margin: 4px 0;
+		color: #ccc;
+	}
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2px;
+		margin: 3px 0;
+	}
+	.chip {
+		min-width: 1.6em;
+		text-align: center;
+		font-size: 10px;
+		padding: 0 2px;
+		border-radius: 3px;
+		background: #2e7d3a;
+	}
+	.chip.chipwarn {
+		background: #b07a10;
+	}
+	.chip.chipbad {
+		background: #c0233f;
 	}
 </style>
